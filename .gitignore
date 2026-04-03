@@ -1,0 +1,41 @@
+# Unity generated folders
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+/[Mm]emoryCaptures/
+/[Rr]ecordings/
+/[Pp]ackages/com.unity.collab-proxy/
+
+# IDE/Editor caches
+/.vs/
+/.idea/
+/*.csproj
+/*.sln
+/*.suo
+/*.user
+/*.userprefs
+/*.pidb
+/*.booproj
+/*.svd
+/*.pdb
+/*.mdb
+/*.opendb
+/*.VC.opendb
+/*.bak
+
+# Unity package/asset artifacts
+*.unitypackage
+*.apk
+*.aab
+
+# Asset Store / JetBrains helpers
+/[Aa]ssets/AssetStoreTools*
+/[Aa]ssets/Plugins/Editor/JetBrains*
+
+# Logs and crash reports
+*.log
+sysinfo.txt

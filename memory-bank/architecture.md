@@ -1,0 +1,17 @@
+## 基础架构现状（2026-04-02）
+- 引擎版本：Unity 2022.3.62f2c1（LTS），暂代计划中的 Unity 6 LTS；待后续确认是否升级。
+- 项目结构：`Assets/`、`Packages/`、`ProjectSettings/`、`UserSettings/` 已生成；使用 URP 2D 渲染管线。
+- 渲染配置：
+  - `Assets/Settings/URP-2D-Renderer.asset`：默认 2D Renderer。
+  - `Assets/Settings/URP-2D-Pipeline.asset`：绑定默认渲染管线，已在 Graphics/Quality 应用。
+  - `Assets/UniversalRenderPipelineGlobalSettings.asset`：URP 全局设置。
+- 场景：
+  - `Assets/Scenes/SampleScene.unity`：正交相机 + Global Light 2D，作为基线示例场景。
+- 包与系统：
+  - Input System 已添加，计划后续在 Project Settings 中确认默认使用新输入系统。
+  - Addressables 已初始化：`Assets/AddressableAssetsData/`（默认分组、构建脚本、模板）。
+  - TextMeshPro、Timeline、Test Framework 已安装（packages-lock 记录）。
+- 编辑器与版本控制：
+  - 序列化模式：Force Text；版本控制：Visible Meta Files（配合未来 Git/LFS）。
+- 已添加的编辑器脚本：
+  - `Assets/Editor/ProjectInitializer.cs`：一次性初始化工具（设置输入系统、创建 URP 2D 资源与示例场景、生成 Addressables 设置、强制文本序列化等）。后续如升级 Unity 或重建项目，可再次运行 `Tools > OneManJourney > Run Project Init`。
