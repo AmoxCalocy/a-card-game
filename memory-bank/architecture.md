@@ -1,4 +1,4 @@
-## 基础架构现状（2026-04-02）
+## 基础架构现状（2026-04-04）
 - 引擎版本：Unity 2022.3.62f2c1（LTS），暂代计划中的 Unity 6 LTS；待后续确认是否升级。
 - 项目结构：`Assets/`、`Packages/`、`ProjectSettings/`、`UserSettings/` 已生成；使用 URP 2D 渲染管线。
 - 渲染配置：
@@ -14,5 +14,8 @@
 - 编辑器与版本控制：
   - 序列化模式：Force Text；版本控制：Visible Meta Files（配合未来 Git/LFS）。
   - 版本控制：Git + Git LFS 已启用；分支模型 `main`（稳定）、`dev`（日常集成）、`feature/*`（需求开发）。`.gitattributes` 跟踪主要美术/音视频/3D 资产类型，>50MB 资产默认走 LFS。
+- CI/CD：
+  - GitHub Actions（`.github/workflows/ci-build.yml`）：使用 game-ci/unity-builder v4（Unity 2022.3.62f2c1，目标 `StandaloneWindows64`），在 `dev`/`main` 的 pull request 及手动触发时构建；产物输出到 `build/roguelike-win` 并上传 artifact，日志写入 `Logs/ci-build.log` 同步上传。
+  - 运行前需在仓库 Secrets 配置 `UNITY_LICENSE`（序列化 license 文件内容）；工作流允许脏工作区以支持 PR 构建。
 - 已添加的编辑器脚本：
   - `Assets/Editor/ProjectInitializer.cs`：一次性初始化工具（设置输入系统、创建 URP 2D 资源与示例场景、生成 Addressables 设置、强制文本序列化等）。后续如升级 Unity 或重建项目，可再次运行 `Tools > OneManJourney > Run Project Init`。
