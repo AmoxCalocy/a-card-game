@@ -57,7 +57,7 @@ jobs:
           buildsPath: build
           buildName: ${{ env.BUILD_NAME }}
           allowDirtyBuild: true
-          unityLicense: ${{ secrets.UNITY_LICENSE }}
+          providerStrategy: unity-licensing-file
           customParameters: -batchmode -nographics -logFile Logs/ci-build.log
 
       - name: Upload build artifact
