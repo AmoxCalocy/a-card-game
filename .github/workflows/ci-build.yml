@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
-      UNITY_VERSION: 2022.3.62f2c1h
+      UNITY_VERSION: 2022.3.62f2c1
       BUILD_NAME: roguelike-win
     steps:
       - name: Checkout
