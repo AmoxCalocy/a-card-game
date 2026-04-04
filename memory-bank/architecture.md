@@ -6,7 +6,7 @@
   - `Assets/Settings/URP-2D-Pipeline.asset`：绑定默认渲染管线，已在 Graphics/Quality 应用。
   - `Assets/UniversalRenderPipelineGlobalSettings.asset`：URP 全局设置。
 - 场景：
-  - `Assets/Scenes/SampleScene.unity`：正交相机 + Global Light 2D，作为基线示例场景。
+  - `Assets/Scenes/SampleScene.unity`：正交相机 + Global Light 2D，作为基线示例场景，已加入 Build Settings 供 CI 构建。
 - 包与系统：
   - Input System 已添加，计划后续在 Project Settings 中确认默认使用新输入系统。
   - Addressables 已初始化：`Assets/AddressableAssetsData/`（默认分组、构建脚本、模板）。
