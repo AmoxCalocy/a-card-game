@@ -46,6 +46,7 @@ jobs:
             echo "UNITY_LICENSE secret is missing; set it in repo settings to run Unity Builder." >&2
             exit 1
           fi
+          echo "UNITY_LICENSE length: ${#UNITY_LICENSE}"
 
       - name: Build (StandaloneWindows64)
         uses: game-ci/unity-builder@v4
@@ -56,6 +57,7 @@ jobs:
           buildsPath: build
           buildName: ${{ env.BUILD_NAME }}
           allowDirtyBuild: true
+          unityLicense: ${{ secrets.UNITY_LICENSE }}
           customParameters: -batchmode -nographics -logFile Logs/ci-build.log
 
       - name: Upload build artifact

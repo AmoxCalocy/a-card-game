@@ -12,4 +12,4 @@
 2026-04-04：完成实施计划第3步（CI：GitHub Actions + Unity Builder 打包 Windows）
 - 新增工作流 `.github/workflows/ci-build.yml`，使用 `game-ci/unity-builder@v4` 固定 Unity 版本 2022.3.62f2，目标 `StandaloneWindows64`，在 `dev/main` 的 pull request 以及手动触发时构建。
 - 构建输出目录 `build/roguelike-win`，日志写入 `Logs/ci-build.log`，两者作为 artifact 上传；并缓存 `Library` 缩短重复构建耗时。
-- 运行前需在仓库 Secrets 配置 `UNITY_LICENSE`（序列化 license 内容）；缺失时工作流会立即报错提示。工作流已默认使用 Node.js 24（`FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true`）以规避 Node 20 弃用警告。
+- 运行前需在仓库 Secrets 配置 `UNITY_LICENSE`（序列化 license 内容）；缺失时工作流会立即报错提示。工作流已默认使用 Node.js 24（`FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true`）以规避 Node 20 弃用警告，并显式通过 `unityLicense` 参数传递 secret。
