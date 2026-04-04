@@ -63,7 +63,7 @@ jobs:
           buildsPath: build
           buildName: ${{ env.BUILD_NAME }}
           allowDirtyBuild: true
-          customParameters: -batchmode -nographics -logFile Logs/ci-build.log
+          customParameters: -logFile Logs/ci-build.log
 
       - name: Upload build artifact
         if: success()

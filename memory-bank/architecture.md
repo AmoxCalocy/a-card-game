@@ -16,6 +16,7 @@
   - 版本控制：Git + Git LFS 已启用；分支模型 `main`（稳定）、`dev`（日常集成）、`feature/*`（需求开发）。`.gitattributes` 跟踪主要美术/音视频/3D 资产类型，>50MB 资产默认走 LFS。
 - CI/CD：
   - GitHub Actions（`.github/workflows/ci-build.yml`）：使用 game-ci/unity-builder v4（Unity 2022.3.62f2，目标 `StandaloneWindows64`），在 `dev`/`main` 的 pull request 及手动触发时构建；产物输出到 `build/roguelike-win` 并上传 artifact，日志写入 `Logs/ci-build.log` 同步上传；默认 opt-in Node.js 24（`FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true`）；激活依赖仓库 Secrets：`UNITY_LICENSE`（.ulf 内容）、`UNITY_EMAIL`、`UNITY_PASSWORD`。
+  - GitHub Actions（`.github/workflows/ci-build.yml`）：使用 game-ci/unity-builder v4（Unity 2022.3.62f2，目标 `StandaloneWindows64`），在 `dev`/`main` 的 pull request 及手动触发时构建；产物输出到 `build/roguelike-win` 并上传 artifact，日志写入 `Logs/ci-build.log` 同步上传；默认 opt-in Node.js 24（`FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true`）；激活依赖仓库 Secrets：`UNITY_LICENSE`（.ulf 内容）、`UNITY_EMAIL`、`UNITY_PASSWORD`；自定义参数仅保留 `-logFile Logs/ci-build.log`（避免与默认 `-batchmode` 重复导致构建异常）。
   - 运行前需在仓库 Secrets 配置 `UNITY_LICENSE`（序列化 license 文件内容）；工作流允许脏工作区以支持 PR 构建。
 - 已添加的编辑器脚本：
   - `Assets/Editor/ProjectInitializer.cs`：一次性初始化工具（设置输入系统、创建 URP 2D 资源与示例场景、生成 Addressables 设置、强制文本序列化等）。后续如升级 Unity 或重建项目，可再次运行 `Tools > OneManJourney > Run Project Init`。
