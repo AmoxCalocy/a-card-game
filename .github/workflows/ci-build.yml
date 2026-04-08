@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       unity_version:
-        description: "Unity version override (e.g. 2022.3.62f2). Leave empty to auto-detect from ProjectVersion.txt."
+        description: "Unity version override (e.g. 2022.3.62f2c1). Leave empty to auto-detect from ProjectVersion.txt."
         required: false
         type: string
       target_platform:

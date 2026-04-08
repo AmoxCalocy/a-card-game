@@ -1,6 +1,7 @@
 using System.IO;
 using System.Reflection;
 using UnityEditor;
+using UnityEditor.VersionControl;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -18,7 +19,7 @@ namespace OneManJourney.Editor
         {
             // 基础项目设置
             EditorSettings.serializationMode = SerializationMode.ForceText;
-            EditorSettings.externalVersionControl = "Visible Meta Files";
+            VersionControlSettings.mode = "Visible Meta Files";
             // 切换到新输入系统（兼容不同版本 API，反射处理）
             TrySetInputSystem();
 
