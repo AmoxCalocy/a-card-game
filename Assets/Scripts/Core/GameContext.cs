@@ -20,6 +20,7 @@ namespace OneManJourney.Runtime
         private readonly Dictionary<ResourceType, int> _resources = new Dictionary<ResourceType, int>();
         private readonly List<CardConfig> _cardPool = new List<CardConfig>();
         private readonly List<EventConfig> _eventPool = new List<EventConfig>();
+        private GameEventBus _eventBus;
         private bool _isInitialized;
 
         public static GameContext Instance { get; private set; }
@@ -31,6 +32,7 @@ namespace OneManJourney.Runtime
         public IReadOnlyDictionary<ResourceType, int> Resources => _resources;
         public IReadOnlyList<CardConfig> CardPool => _cardPool;
         public IReadOnlyList<EventConfig> EventPool => _eventPool;
+        public GameEventBus EventBus => _eventBus;
         // Avoid Unity API calls during MonoBehaviour construction/field initialization.
         public JourneyState JourneyState { get; private set; } = new JourneyState();
 
@@ -45,6 +47,8 @@ namespace OneManJourney.Runtime
             Instance = this;
             DontDestroyOnLoad(gameObject);
             GameServices.Register(this);
+            _eventBus = new GameEventBus();
+            GameServices.Register(_eventBus);
             Initialize();
         }
 
@@ -56,6 +60,9 @@ namespace OneManJourney.Runtime
             }
 
             GameServices.Unregister<GameContext>();
+            GameServices.Unregister<GameEventBus>();
+            _eventBus?.Clear();
+            _eventBus = null;
             Instance = null;
         }
 
@@ -75,6 +82,13 @@ namespace OneManJourney.Runtime
 
             _isInitialized = true;
             Initialized?.Invoke();
+            Publish(new GameContextInitializedEvent(
+                JourneyState.Chapter,
+                JourneyState.NodeIndex,
+                JourneyState.NodesVisited,
+                JourneyState.CrisisValue,
+                _cardPool.Count,
+                _eventPool.Count));
             NotifyStateChanged();
         }
 
@@ -85,17 +99,25 @@ namespace OneManJourney.Runtime
 
         public void SetResource(ResourceType type, int amount)
         {
+            int previousAmount = GetResource(type);
             if (type != ResourceType.Crisis && amount < 0)
             {
                 amount = 0;
             }
 
-            _resources[type] = amount;
             if (type == ResourceType.Crisis)
             {
                 JourneyState.CrisisValue = amount;
             }
 
+            if (previousAmount == amount)
+            {
+                return;
+            }
+
+            _resources[type] = amount;
+
+            Publish(new ResourceChangedEvent(type, previousAmount, amount));
             NotifyStateChanged();
         }
 
@@ -107,17 +129,49 @@ namespace OneManJourney.Runtime
 
         public void SetJourneyProgress(int chapter, int nodeIndex, int nodesVisited)
         {
+            int previousChapter = JourneyState.Chapter;
+            int previousNodeIndex = JourneyState.NodeIndex;
+            int previousNodesVisited = JourneyState.NodesVisited;
+
             JourneyState.Chapter = chapter;
             JourneyState.NodeIndex = nodeIndex;
             JourneyState.NodesVisited = nodesVisited;
+
+            if (previousChapter == JourneyState.Chapter
+                && previousNodeIndex == JourneyState.NodeIndex
+                && previousNodesVisited == JourneyState.NodesVisited)
+            {
+                return;
+            }
+
+            Publish(new NodeSelectedEvent(
+                previousChapter,
+                previousNodeIndex,
+                previousNodesVisited,
+                JourneyState.Chapter,
+                JourneyState.NodeIndex,
+                JourneyState.NodesVisited));
             NotifyStateChanged();
         }
 
         public void AdvanceNode()
         {
-            JourneyState.NodeIndex += 1;
-            JourneyState.NodesVisited += 1;
+            SetJourneyProgress(JourneyState.Chapter, JourneyState.NodeIndex + 1, JourneyState.NodesVisited + 1);
+        }
+
+        public bool TryDrawCard(out CardConfig card)
+        {
+            if (_cardPool.Count == 0)
+            {
+                card = null;
+                return false;
+            }
+
+            card = _cardPool[0];
+            _cardPool.RemoveAt(0);
+            Publish(new CardDrawnEvent(card, _cardPool.Count));
             NotifyStateChanged();
+            return true;
         }
 
         public void SetCardPool(IEnumerable<CardConfig> cards)
@@ -194,6 +248,11 @@ namespace OneManJourney.Runtime
             }
 
             StateChanged?.Invoke();
+        }
+
+        private void Publish<TEvent>(TEvent gameEvent)
+        {
+            _eventBus?.Publish(gameEvent);
         }
 
         private void LoadDefaultsIfNeeded()

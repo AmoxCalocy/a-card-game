@@ -65,3 +65,31 @@
   - `GameContextRoot` 成功存在并挂载 `GameContext` + `GameContextDebugPanel`。
   - `GameContextDebugPanel` 的 `ContextText` 内容包含 `GameContext Debug`、`Resources`、卡池/事件池计数与旅途状态字段。
   - 资源显示与 `Assets/Data/TestStep4/ResourceTableConfig.asset` 初始值一致（Food/Wealth/Reputation/MedicalSupplies/Crisis），满足“进场景后可读取并显示初始卡池与资源数值”的第5步验收标准。
+
+## 事件流层（2026-04-19，实施计划第6步）
+- 新增文件：
+  - `Assets/Scripts/Core/GameEventBus.cs`：轻量泛型事件总线，支持 `Subscribe<T>`、`Publish<T>`、`Unsubscribe<T>`，订阅返回 `IDisposable`，便于生命周期解绑。
+  - `Assets/Scripts/Core/GameEventMessages.cs`：统一消息类型定义，当前包含：
+    - `GameContextInitializedEvent`
+    - `ResourceChangedEvent`
+    - `CardDrawnEvent`
+    - `NodeSelectedEvent`
+- `GameContext` 接入事件发布：
+  - 在 `Awake` 创建并注册 `GameEventBus`（通过 `GameServices` 可解析）。
+  - 资源变化通过 `SetResource` 发布 `ResourceChangedEvent`（含前值/现值/Delta）。
+  - 节点进度变化通过 `SetJourneyProgress`/`AdvanceNode` 发布 `NodeSelectedEvent`。
+  - 初始化完成发布 `GameContextInitializedEvent`。
+  - 新增 `TryDrawCard(out CardConfig)`，抽卡时发布 `CardDrawnEvent`。
+- `GameContextDebugPanel` 接入事件订阅：
+  - 通过 `GameServices` 解析事件总线并订阅上述消息，消息到达时刷新面板。
+  - 在 `OnDisable`/重绑定时释放订阅，避免悬挂回调和空引用。
+
+## 第6步验证状态（2026-04-19）
+- 验证环境：Unity 2022.3.62f2c1，`Assets/Scenes/SampleScene.unity`。
+- 验证方法：
+  - 通过 `GameContextStep6TestDriver` 触发资源变更、危机值变更、节点推进、抽卡。
+  - 观察 `GameContextDebugPanel` 是否实时刷新，以及 Console 事件日志是否输出。
+- 验证结果：
+  - 抽卡日志输出正常（例如：`Step6TestDriver: drew card New Card (card.id).`）。
+  - 资源/节点/卡池变更链路可用，调试面板随事件实时更新。
+  - 验证结论：第6步验收通过。

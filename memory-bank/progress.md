@@ -33,3 +33,14 @@
 - `GameContext` 已接入第4步数据层：读取 `ResourceTableConfig` 初始化资源字典（含 `Crisis` 同步到 `JourneyState`）、加载起始卡池与事件池，并提供统一读写接口（`GetResource`/`SetResource`/`AddResource`、`SetCardPool`、`SetEventPool`）。
 - 新增 `GameContextDebugPanel`（TMP Overlay 调试面板），用于实时显示旅途状态、资源、卡池和事件池，订阅 `Initialized/StateChanged` 事件自动刷新。
 - 本次人工验证结果：Play 模式下 `ContextText` 的 TMP `Text` 字段可见 `GameContext Debug`、`Resources` 和卡池/事件池信息，且资源数据可更新；验证通过第5步验收标准“进场景可读取并显示初始卡池与资源数值”。
+
+2026-04-19：完成实施计划第6步代码实现（事件总线与消息类型，待验证）
+- 新增事件总线 `GameEventBus`（`Subscribe<T>`/`Publish<T>`/`Unsubscribe<T>`），并通过 `IDisposable` 订阅句柄统一管理解绑。
+- 新增消息类型 `GameContextInitializedEvent`、`ResourceChangedEvent`、`CardDrawnEvent`、`NodeSelectedEvent`，统一约定“初始化/资源变更/抽卡/节点选择”事件载荷。
+- `GameContext` 完成事件发布接入：初始化完成、资源变化、节点推进、抽卡动作均会发布对应消息。
+- `GameContextDebugPanel` 完成事件订阅接入：订阅上述消息后刷新 UI，并在禁用/重绑定时释放订阅，降低空引用风险。
+- 验证状态：等待测试执行第6步验收（资源变更触发 UI 实时刷新，且无空引用）。
+
+2026-04-19：第6步验证通过（事件流）
+- 由测试执行验证通过：事件链路可触发并驱动 UI 刷新，抽卡日志正常（示例：`Step6TestDriver: drew card New Card (card.id).`）。
+- 验收结论：实施计划第6步完成；按要求暂不开始第7步。

@@ -12,6 +12,11 @@ namespace OneManJourney.Runtime
     {
         private readonly StringBuilder _builder = new StringBuilder(512);
         private GameContext _context;
+        private GameEventBus _eventBus;
+        private IDisposable _resourceChangedSubscription;
+        private IDisposable _nodeSelectedSubscription;
+        private IDisposable _cardDrawnSubscription;
+        private IDisposable _contextInitializedSubscription;
         private TextMeshProUGUI _text;
 
         private void Awake()
@@ -34,12 +39,18 @@ namespace OneManJourney.Runtime
 
         private void Update()
         {
-            if (_context != null)
+            bool didBind = false;
+            if (_context == null && TryBindContext())
             {
-                return;
+                didBind = true;
             }
 
-            if (TryBindContext())
+            if (_eventBus == null && TryBindEventBus())
+            {
+                didBind = true;
+            }
+
+            if (didBind)
             {
                 Refresh();
             }
@@ -76,22 +87,89 @@ namespace OneManJourney.Runtime
 
             _context.Initialized += HandleContextStateChanged;
             _context.StateChanged += HandleContextStateChanged;
+            TryBindEventBus();
             return true;
         }
 
         private void UnbindContext()
         {
-            if (_context == null)
+            if (_context != null)
             {
-                return;
+                _context.Initialized -= HandleContextStateChanged;
+                _context.StateChanged -= HandleContextStateChanged;
+                _context = null;
             }
 
-            _context.Initialized -= HandleContextStateChanged;
-            _context.StateChanged -= HandleContextStateChanged;
-            _context = null;
+            UnbindEventBus();
         }
 
         private void HandleContextStateChanged()
+        {
+            Refresh();
+        }
+
+        private bool TryBindEventBus()
+        {
+            GameEventBus nextEventBus = null;
+            if (_context != null)
+            {
+                nextEventBus = _context.EventBus;
+            }
+
+            if (nextEventBus == null && GameServices.TryResolve(out GameEventBus resolved))
+            {
+                nextEventBus = resolved;
+            }
+
+            if (_eventBus == nextEventBus)
+            {
+                return _eventBus != null;
+            }
+
+            UnbindEventBus();
+            _eventBus = nextEventBus;
+            if (_eventBus == null)
+            {
+                return false;
+            }
+
+            _resourceChangedSubscription = _eventBus.Subscribe<ResourceChangedEvent>(HandleResourceChanged);
+            _nodeSelectedSubscription = _eventBus.Subscribe<NodeSelectedEvent>(HandleNodeSelected);
+            _cardDrawnSubscription = _eventBus.Subscribe<CardDrawnEvent>(HandleCardDrawn);
+            _contextInitializedSubscription = _eventBus.Subscribe<GameContextInitializedEvent>(HandleContextInitialized);
+            return true;
+        }
+
+        private void UnbindEventBus()
+        {
+            _resourceChangedSubscription?.Dispose();
+            _nodeSelectedSubscription?.Dispose();
+            _cardDrawnSubscription?.Dispose();
+            _contextInitializedSubscription?.Dispose();
+
+            _resourceChangedSubscription = null;
+            _nodeSelectedSubscription = null;
+            _cardDrawnSubscription = null;
+            _contextInitializedSubscription = null;
+            _eventBus = null;
+        }
+
+        private void HandleResourceChanged(ResourceChangedEvent _)
+        {
+            Refresh();
+        }
+
+        private void HandleNodeSelected(NodeSelectedEvent _)
+        {
+            Refresh();
+        }
+
+        private void HandleCardDrawn(CardDrawnEvent _)
+        {
+            Refresh();
+        }
+
+        private void HandleContextInitialized(GameContextInitializedEvent _)
         {
             Refresh();
         }
