@@ -16,11 +16,14 @@ namespace OneManJourney.Runtime
         [SerializeField] private List<CardConfig> _startingCardPool = new List<CardConfig>();
         [SerializeField] private List<EventConfig> _startingEventPool = new List<EventConfig>();
         [SerializeField] private bool _autoLoadEditorData = true;
+        [Header("Journey Map")]
+        [SerializeField] private JourneyMapGenerationConfig _journeyMapGenerationConfig = new JourneyMapGenerationConfig();
 
         private readonly Dictionary<ResourceType, int> _resources = new Dictionary<ResourceType, int>();
         private readonly List<CardConfig> _cardPool = new List<CardConfig>();
         private readonly List<EventConfig> _eventPool = new List<EventConfig>();
         private GameEventBus _eventBus;
+        private JourneyMap _journeyMap;
         private bool _isInitialized;
 
         public static GameContext Instance { get; private set; }
@@ -33,6 +36,7 @@ namespace OneManJourney.Runtime
         public IReadOnlyList<CardConfig> CardPool => _cardPool;
         public IReadOnlyList<EventConfig> EventPool => _eventPool;
         public GameEventBus EventBus => _eventBus;
+        public JourneyMap JourneyMap => _journeyMap;
         // Avoid Unity API calls during MonoBehaviour construction/field initialization.
         public JourneyState JourneyState { get; private set; } = new JourneyState();
 
@@ -79,6 +83,7 @@ namespace OneManJourney.Runtime
 
             JourneyState = JourneyState.CreateDefault();
             JourneyState.CrisisValue = GetResource(ResourceType.Crisis);
+            BuildJourneyMap(JourneyState.RunSeed);
 
             _isInitialized = true;
             Initialized?.Invoke();
@@ -89,6 +94,7 @@ namespace OneManJourney.Runtime
                 JourneyState.CrisisValue,
                 _cardPool.Count,
                 _eventPool.Count));
+            Publish(new JourneyMapGeneratedEvent(_journeyMap));
             NotifyStateChanged();
         }
 
@@ -188,6 +194,19 @@ namespace OneManJourney.Runtime
             NotifyStateChanged();
         }
 
+        public void RegenerateJourneyMap()
+        {
+            RegenerateJourneyMap(UnityEngine.Random.Range(int.MinValue, int.MaxValue));
+        }
+
+        public void RegenerateJourneyMap(int seed)
+        {
+            BuildJourneyMap(seed);
+            JourneyState.RunSeed = seed;
+            Publish(new JourneyMapGeneratedEvent(_journeyMap));
+            NotifyStateChanged();
+        }
+
         private void BuildResources()
         {
             _resources.Clear();
@@ -248,6 +267,11 @@ namespace OneManJourney.Runtime
             }
 
             StateChanged?.Invoke();
+        }
+
+        private void BuildJourneyMap(int seed)
+        {
+            _journeyMap = JourneyMapGenerator.Generate(seed, _journeyMapGenerationConfig);
         }
 
         private void Publish<TEvent>(TEvent gameEvent)

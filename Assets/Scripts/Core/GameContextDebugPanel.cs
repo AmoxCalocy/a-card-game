@@ -17,6 +17,7 @@ namespace OneManJourney.Runtime
         private IDisposable _nodeSelectedSubscription;
         private IDisposable _cardDrawnSubscription;
         private IDisposable _contextInitializedSubscription;
+        private IDisposable _journeyMapGeneratedSubscription;
         private TextMeshProUGUI _text;
 
         private void Awake()
@@ -137,6 +138,7 @@ namespace OneManJourney.Runtime
             _nodeSelectedSubscription = _eventBus.Subscribe<NodeSelectedEvent>(HandleNodeSelected);
             _cardDrawnSubscription = _eventBus.Subscribe<CardDrawnEvent>(HandleCardDrawn);
             _contextInitializedSubscription = _eventBus.Subscribe<GameContextInitializedEvent>(HandleContextInitialized);
+            _journeyMapGeneratedSubscription = _eventBus.Subscribe<JourneyMapGeneratedEvent>(HandleJourneyMapGenerated);
             return true;
         }
 
@@ -146,11 +148,13 @@ namespace OneManJourney.Runtime
             _nodeSelectedSubscription?.Dispose();
             _cardDrawnSubscription?.Dispose();
             _contextInitializedSubscription?.Dispose();
+            _journeyMapGeneratedSubscription?.Dispose();
 
             _resourceChangedSubscription = null;
             _nodeSelectedSubscription = null;
             _cardDrawnSubscription = null;
             _contextInitializedSubscription = null;
+            _journeyMapGeneratedSubscription = null;
             _eventBus = null;
         }
 
@@ -170,6 +174,11 @@ namespace OneManJourney.Runtime
         }
 
         private void HandleContextInitialized(GameContextInitializedEvent _)
+        {
+            Refresh();
+        }
+
+        private void HandleJourneyMapGenerated(JourneyMapGeneratedEvent _)
         {
             Refresh();
         }
@@ -262,6 +271,7 @@ namespace OneManJourney.Runtime
             _builder.AppendLine($"Crisis: {state.CrisisValue}");
             _builder.AppendLine($"Card Pool: {_context.CardPool.Count}");
             _builder.AppendLine($"Event Pool: {_context.EventPool.Count}");
+            AppendJourneyMapSummary(_context.JourneyMap);
             _builder.AppendLine();
             _builder.AppendLine("Resources:");
 
@@ -297,6 +307,22 @@ namespace OneManJourney.Runtime
             }
 
             _text.text = _builder.ToString();
+        }
+
+        private void AppendJourneyMapSummary(JourneyMap journeyMap)
+        {
+            _builder.AppendLine();
+            _builder.AppendLine("Journey Map:");
+            if (journeyMap == null)
+            {
+                _builder.AppendLine("- Not Generated");
+                return;
+            }
+
+            _builder.AppendLine($"- Nodes: {journeyMap.Nodes.Count}");
+            _builder.AppendLine($"- Routes: {journeyMap.RouteCount}");
+            _builder.AppendLine($"- Branching Nodes: {journeyMap.BranchingNodeCount}");
+            _builder.AppendLine($"- Battle/Event/Supply/Boss: {journeyMap.GetTypeCount(JourneyNodeType.Battle)}/{journeyMap.GetTypeCount(JourneyNodeType.Event)}/{journeyMap.GetTypeCount(JourneyNodeType.Supply)}/{journeyMap.GetTypeCount(JourneyNodeType.Boss)}");
         }
     }
 }

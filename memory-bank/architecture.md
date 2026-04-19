@@ -93,3 +93,36 @@
   - 抽卡日志输出正常（例如：`Step6TestDriver: drew card New Card (card.id).`）。
   - 资源/节点/卡池变更链路可用，调试面板随事件实时更新。
   - 验证结论：第6步验收通过。
+
+## 世界地图层（2026-04-19，实施计划第7步）
+- 新增地图模型与生成器：
+  - `Assets/Scripts/Core/JourneyMap.cs`
+    - 定义 `JourneyNodeType`（`Battle`/`Event`/`Supply`/`Boss`）。
+    - 定义 `JourneyMapGenerationConfig`（层数、每层节点数、战斗/事件/补给权重）。
+    - 定义运行时地图结构 `JourneyMap`/`JourneyMapNode`（节点列表、路线数、分支节点数、类型统计）。
+  - `Assets/Scripts/Core/JourneyMapGenerator.cs`
+    - 生成固定 DAG 拓扑：起点层 -> 中间内容层 -> 首领层。
+    - 默认配置下节点总数为 `1 + (LayerCount - 2) * LanesPerLayer + 1`，满足 10+ 节点目标（默认 14）。
+    - 起点至少连接 2 个下一层节点，并在中间层引入横向分叉，保证至少 2 条路线。
+    - 非首领节点按权重分配为战斗/事件/补给，最后一层固定首领节点。
+    - 生成后计算 `RouteCount` 与 `BranchingNodeCount` 供验收使用。
+- `GameContext` 接入地图生命周期：
+  - 初始化时基于 `JourneyState.RunSeed` 生成地图。
+  - 新增 `RegenerateJourneyMap()`/`RegenerateJourneyMap(int seed)`，可在运行时重建地图并更新 `RunSeed`。
+  - 新增属性 `JourneyMap` 暴露当前地图快照。
+- 事件系统扩展：
+  - `Assets/Scripts/Core/GameEventMessages.cs` 新增 `JourneyMapGeneratedEvent`（包含节点数、路线数、分支节点数与类型计数）。
+  - `GameContext` 在初始化与地图重建时发布 `JourneyMapGeneratedEvent`。
+- 调试可视化：
+  - `GameContextDebugPanel` 新增地图摘要区，显示节点总数、路线数、分支节点数、各类型数量。
+  - 新增 `Assets/Scripts/Core/GameContextStep7TestDriver.cs`，支持运行时热键触发重建与完整节点日志输出。
+
+## 第7步验证状态（2026-04-19）
+- 验证环境：Unity 2022.3.62f2c1，`Assets/Scenes/SampleScene.unity`。
+- 验证方法：
+  - 运行 `GameContextStep7TestDriver`，通过热键触发地图重生成事件。
+  - 观察 Console 中 `JourneyMapGeneratedEvent` 日志，以及调试面板地图摘要。
+- 验证结果：
+  - 日志示例：`Step7TestDriver Event: MapGenerated seed=1668988292, nodes=14, routes=16, branchingNodes=10, battle/event/supply/boss=7/3/3/1.`
+  - 节点数满足 `>=10`，且路线数 `>=2`，存在有效分支节点。
+  - 验证结论：第7步验收通过。

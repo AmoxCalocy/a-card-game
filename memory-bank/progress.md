@@ -44,3 +44,16 @@
 2026-04-19：第6步验证通过（事件流）
 - 由测试执行验证通过：事件链路可触发并驱动 UI 刷新，抽卡日志正常（示例：`Step6TestDriver: drew card New Card (card.id).`）。
 - 验收结论：实施计划第6步完成；按要求暂不开始第7步。
+
+2026-04-19：完成实施计划第7步代码实现（节点式大地图，待验证）
+- 新增地图建模与生成逻辑：`JourneyMap`、`JourneyMapNode`、`JourneyMapGenerationConfig`、`JourneyMapGenerator`。
+- 地图拓扑采用分层 DAG：起点 -> 多层内容节点（战斗/事件/补给）-> 首领节点；默认配置下生成 14 个节点（满足 10+）。
+- 生成逻辑保证起点至少 2 条可选分支，并统计 `RouteCount` 与 `BranchingNodeCount` 供验收。
+- `GameContext` 已接入地图初始化与重建接口（`RegenerateJourneyMap`），并发布 `JourneyMapGeneratedEvent`。
+- `GameContextDebugPanel` 已展示地图摘要（节点数、路线数、分支节点数、类型计数）；新增 `GameContextStep7TestDriver` 便于手工验证。
+- 验证状态：等待测试执行第7步验收；在通过前不进入第8步。
+
+2026-04-19：第7步验证通过（节点式大地图）
+- 测试结果通过，日志示例：`Step7TestDriver Event: MapGenerated seed=1668988292, nodes=14, routes=16, branchingNodes=10, battle/event/supply/boss=7/3/3/1.`
+- 验收结论：节点数、路线数、分支数与节点类型分布均符合第7步目标。
+- 按要求：在你明确指令前，不开始第8步实现。

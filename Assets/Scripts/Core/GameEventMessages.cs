@@ -75,4 +75,30 @@ namespace OneManJourney.Runtime
         public int CurrentNodeIndex { get; }
         public int CurrentNodesVisited { get; }
     }
+
+    public readonly struct JourneyMapGeneratedEvent
+    {
+        public JourneyMapGeneratedEvent(JourneyMap map)
+        {
+            Map = map;
+            Seed = map?.Seed ?? 0;
+            NodeCount = map?.Nodes.Count ?? 0;
+            RouteCount = map?.RouteCount ?? 0;
+            BranchingNodeCount = map?.BranchingNodeCount ?? 0;
+            BattleNodeCount = map?.GetTypeCount(JourneyNodeType.Battle) ?? 0;
+            EventNodeCount = map?.GetTypeCount(JourneyNodeType.Event) ?? 0;
+            SupplyNodeCount = map?.GetTypeCount(JourneyNodeType.Supply) ?? 0;
+            BossNodeCount = map?.GetTypeCount(JourneyNodeType.Boss) ?? 0;
+        }
+
+        public JourneyMap Map { get; }
+        public int Seed { get; }
+        public int NodeCount { get; }
+        public int RouteCount { get; }
+        public int BranchingNodeCount { get; }
+        public int BattleNodeCount { get; }
+        public int EventNodeCount { get; }
+        public int SupplyNodeCount { get; }
+        public int BossNodeCount { get; }
+    }
 }
