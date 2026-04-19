@@ -27,3 +27,9 @@
 - Unity 项目版本文件 `ProjectSettings/ProjectVersion.txt` 更新为 `2022.3.62f2c1`，与本地 Unity Hub 显示版本一致。
 - CI 工作流 `.github/workflows/ci-build.yml` 增强：默认从 `ProjectVersion.txt` 读取 Unity 版本，支持 `workflow_dispatch` 手动覆盖版本；激活策略校验支持 `UNITY_EMAIL` + `UNITY_PASSWORD` 搭配 `UNITY_LICENSE` 或 `UNITY_SERIAL`，并兼容 `UNITY_LICENSING_SERVER`。
 - 编辑器初始化脚本 `Assets/Editor/ProjectInitializer.cs` 将已弃用的 `EditorSettings.externalVersionControl` 替换为 `VersionControlSettings.mode`，消除 CS0618 警告。
+
+2026-04-19：完成实施计划第5步（GameContext 全局上下文）并完成验证
+- 新增运行时核心脚本：`GameContext`、`GameServices`、`JourneyState`，并通过 `GameContextBootstrap` 在场景加载后自动确保上下文实例存在（`DontDestroyOnLoad`）。
+- `GameContext` 已接入第4步数据层：读取 `ResourceTableConfig` 初始化资源字典（含 `Crisis` 同步到 `JourneyState`）、加载起始卡池与事件池，并提供统一读写接口（`GetResource`/`SetResource`/`AddResource`、`SetCardPool`、`SetEventPool`）。
+- 新增 `GameContextDebugPanel`（TMP Overlay 调试面板），用于实时显示旅途状态、资源、卡池和事件池，订阅 `Initialized/StateChanged` 事件自动刷新。
+- 本次人工验证结果：Play 模式下 `ContextText` 的 TMP `Text` 字段可见 `GameContext Debug`、`Resources` 和卡池/事件池信息，且资源数据可更新；验证通过第5步验收标准“进场景可读取并显示初始卡池与资源数值”。

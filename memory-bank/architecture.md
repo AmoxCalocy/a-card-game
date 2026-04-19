@@ -42,3 +42,26 @@
 ## 第4步验证状态（2026-04-08）
 - 验证环境：Unity 2022.3.62f2c1。
 - 验证结果：6 类 ScriptableObject 模板均可在 `OneManJourney/Data/*` 菜单创建；字段可编辑并持久化；`CompanionConfig.StarterCards` 与 `EventOptionData.RecruitedCompanion` 交叉引用正常；重启后无序列化报错。
+
+## 运行时上下文层（2026-04-19，实施计划第5步）
+- 新增目录与文件：`Assets/Scripts/Core/`
+  - `GameContext.cs`：全局上下文聚合根，管理资源、卡池、事件池、旅途状态；统一暴露资源与进度读写接口，并通过 `Initialized`/`StateChanged` 事件对外广播状态变化。
+  - `GameServices.cs`：轻量服务定位器，用于注册与解析运行时单例服务（当前用于 `GameContext` 解析）。
+  - `JourneyState.cs`：旅途进度数据模型（章节、节点索引、访问节点数、RunSeed、危机值），并提供默认值工厂。
+  - `GameContextBootstrap.cs`：`RuntimeInitializeOnLoadMethod` 启动引导，确保场景加载后存在 `GameContext` 与 `GameContextDebugPanel`。
+  - `GameContextDebugPanel.cs`：调试 UI（ScreenSpaceOverlay + TMP），实时展示资源、卡池、事件池和旅途状态，作为第5步验收可视化入口。
+- 生命周期与数据流：
+  - 应用启动后由 Bootstrap 检测或创建 `GameContextRoot`，`GameContext.Awake()` 中完成单例约束、`DontDestroyOnLoad`、服务注册和初始化。
+  - 初始化阶段按顺序执行：加载默认资产（Editor 可自动扫描 `Assets/Data`）→构建资源字典→构建卡池/事件池→创建默认 `JourneyState`。
+  - 资源写入规则：除 `ResourceType.Crisis` 外，资源不会被写成负数；`Crisis` 变化会同步到 `JourneyState.CrisisValue`。
+- 依赖与边界：
+  - 该层消费第4步 ScriptableObject 数据模板，不包含业务事件总线（计划第6步）与战斗/地图流程逻辑。
+  - 调试面板仅用于开发期观测，不参与正式 HUD（计划第7步）。
+
+## 第5步验证状态（2026-04-19）
+- 验证环境：Unity 2022.3.62f2c1，`Assets/Scenes/SampleScene.unity`。
+- 验证方法：进入 Play 后检查运行时生成对象与 TMP 调试文本。
+- 验证结果：
+  - `GameContextRoot` 成功存在并挂载 `GameContext` + `GameContextDebugPanel`。
+  - `GameContextDebugPanel` 的 `ContextText` 内容包含 `GameContext Debug`、`Resources`、卡池/事件池计数与旅途状态字段。
+  - 资源显示与 `Assets/Data/TestStep4/ResourceTableConfig.asset` 初始值一致（Food/Wealth/Reputation/MedicalSupplies/Crisis），满足“进场景后可读取并显示初始卡池与资源数值”的第5步验收标准。
