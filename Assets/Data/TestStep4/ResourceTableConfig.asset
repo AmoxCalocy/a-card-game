@@ -1,0 +1,59 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b8202bcccbd944f782a19fa7f6060170, type: 3}
+  m_Name: ResourceTableConfig
+  m_EditorClassIdentifier: 
+  _id: resource-table.default
+  _displayName: Default Resource Table
+  _startingResources:
+  - Type: 0
+    Amount: 20
+  - Type: 1
+    Amount: 30
+  - Type: 2
+    Amount: 1
+  - Type: 3
+    Amount: 3
+  - Type: 0
+    Amount: 0
+  - Type: 0
+    Amount: 0
+  - Type: 0
+    Amount: 0
+  - Type: 0
+    Amount: 0
+  - Type: 0
+    Amount: 0
+  - Type: 0
+    Amount: 0
+  - Type: 0
+    Amount: 0
+  - Type: 0
+    Amount: 0
+  - Type: 0
+    Amount: 0
+  - Type: 0
+    Amount: 0
+  - Type: 0
+    Amount: 0
+  - Type: 0
+    Amount: 0
+  - Type: 0
+    Amount: 0
+  - Type: 0
+    Amount: 0
+  - Type: 0
+    Amount: 0
+  - Type: 0
+    Amount: 0
+  _startingCrisis: 0
+  _chapterDropDecayPercent: 20
