@@ -57,3 +57,17 @@
 - 测试结果通过，日志示例：`Step7TestDriver Event: MapGenerated seed=1668988292, nodes=14, routes=16, branchingNodes=10, battle/event/supply/boss=7/3/3/1.`
 - 验收结论：节点数、路线数、分支数与节点类型分布均符合第7步目标。
 - 按要求：在你明确指令前，不开始第8步实现。
+
+2026-04-23：完成实施计划第8步代码实现（旅途推进 + 场景路由 + 断粮阻断）
+- 在 `Assets/Scripts/Core/GameContext.cs` 新增旅途推进双阶段流程：`TryEnterNextJourneyNode`（进入节点）与 `TryCompleteActiveJourneyNode`（完成节点并结算），并加入粮食消耗（默认每步 1）与断粮拦截。
+- 在 `Assets/Scripts/Core/GameEventMessages.cs` 新增第8步事件与阻断原因枚举：`JourneyNodeEnteredEvent`、`JourneyNodeCompletedEvent`、`JourneyAdvanceBlockedEvent`、`JourneyAdvanceBlockReason`。
+- 在 `Assets/Scripts/Core/JourneyMap.cs` 增加节点 ID 索引（`TryGetNode`）用于路径合法性校验和节点查询。
+- 新增 `Assets/Scripts/Core/JourneyNodeSceneRouter.cs`，监听 `JourneyNodeEnteredEvent` 并按节点类型场景名尝试加载对应场景（未进 Build Settings 时给出 warning，不中断流程）。
+- 更新 `Assets/Scripts/Core/GameContextBootstrap.cs`，自动确保 `JourneyNodeSceneRouter` 存在；更新 `Assets/Scripts/Core/GameContextDebugPanel.cs` 展示第8步信息（可选下一节点、激活遭遇、阻断提示等）。
+- 新增 `Assets/Scripts/Core/GameContextStep8TestDriver.cs` 作为第8步手工验收驱动（GUI 点击与热键），支持验证“点击节点进入场景、完成后推进并扣粮、断粮禁止前进”。
+- 体验修正：`GameContextStep8TestDriver` 改为 `DontDestroyOnLoad` 常驻，避免切场景后按钮消失；调试面板字体与换行参数调整为更易读。
+
+2026-04-23：第8步验证通过（由测试执行）
+- 验证通过：点击节点可进入对应场景；完成节点后推进到目标节点并扣除粮食；粮食为 0 时禁止继续前进并提示阻断原因。
+- 现状说明：进入节点后看到蓝色背景属于占位测试场景默认相机背景色，符合当前阶段预期；正式地图/HUD 回场流程不在第8步范围内。
+- 按约束执行：第9步（危机值与灾害事件挂钩）尚未开始。
