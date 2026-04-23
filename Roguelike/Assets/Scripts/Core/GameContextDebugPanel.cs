@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Text;
 using OneManJourney.Data;
 using TMPro;
@@ -18,6 +19,9 @@ namespace OneManJourney.Runtime
         private IDisposable _cardDrawnSubscription;
         private IDisposable _contextInitializedSubscription;
         private IDisposable _journeyMapGeneratedSubscription;
+        private IDisposable _journeyNodeEnteredSubscription;
+        private IDisposable _journeyNodeCompletedSubscription;
+        private IDisposable _journeyAdvanceBlockedSubscription;
         private TextMeshProUGUI _text;
 
         private void Awake()
@@ -139,6 +143,9 @@ namespace OneManJourney.Runtime
             _cardDrawnSubscription = _eventBus.Subscribe<CardDrawnEvent>(HandleCardDrawn);
             _contextInitializedSubscription = _eventBus.Subscribe<GameContextInitializedEvent>(HandleContextInitialized);
             _journeyMapGeneratedSubscription = _eventBus.Subscribe<JourneyMapGeneratedEvent>(HandleJourneyMapGenerated);
+            _journeyNodeEnteredSubscription = _eventBus.Subscribe<JourneyNodeEnteredEvent>(HandleJourneyNodeEntered);
+            _journeyNodeCompletedSubscription = _eventBus.Subscribe<JourneyNodeCompletedEvent>(HandleJourneyNodeCompleted);
+            _journeyAdvanceBlockedSubscription = _eventBus.Subscribe<JourneyAdvanceBlockedEvent>(HandleJourneyAdvanceBlocked);
             return true;
         }
 
@@ -149,12 +156,18 @@ namespace OneManJourney.Runtime
             _cardDrawnSubscription?.Dispose();
             _contextInitializedSubscription?.Dispose();
             _journeyMapGeneratedSubscription?.Dispose();
+            _journeyNodeEnteredSubscription?.Dispose();
+            _journeyNodeCompletedSubscription?.Dispose();
+            _journeyAdvanceBlockedSubscription?.Dispose();
 
             _resourceChangedSubscription = null;
             _nodeSelectedSubscription = null;
             _cardDrawnSubscription = null;
             _contextInitializedSubscription = null;
             _journeyMapGeneratedSubscription = null;
+            _journeyNodeEnteredSubscription = null;
+            _journeyNodeCompletedSubscription = null;
+            _journeyAdvanceBlockedSubscription = null;
             _eventBus = null;
         }
 
@@ -183,6 +196,21 @@ namespace OneManJourney.Runtime
             Refresh();
         }
 
+        private void HandleJourneyNodeEntered(JourneyNodeEnteredEvent _)
+        {
+            Refresh();
+        }
+
+        private void HandleJourneyNodeCompleted(JourneyNodeCompletedEvent _)
+        {
+            Refresh();
+        }
+
+        private void HandleJourneyAdvanceBlocked(JourneyAdvanceBlockedEvent _)
+        {
+            Refresh();
+        }
+
         private void EnsureUi()
         {
             if (_text != null)
@@ -207,7 +235,7 @@ namespace OneManJourney.Runtime
             panelRect.anchorMax = new Vector2(0f, 1f);
             panelRect.pivot = new Vector2(0f, 1f);
             panelRect.anchoredPosition = new Vector2(16f, -16f);
-            panelRect.sizeDelta = new Vector2(440f, 680f);
+            panelRect.sizeDelta = new Vector2(460f, 760f);
 
             Image panelImage = panelObject.GetComponent<Image>();
             panelImage.color = new Color(0.08f, 0.08f, 0.08f, 0.88f);
@@ -222,10 +250,11 @@ namespace OneManJourney.Runtime
 
             _text = textObject.GetComponent<TextMeshProUGUI>();
             _text.font = ResolveDebugFont();
-            _text.fontSize = 20f;
+            _text.fontSize = 16f;
             _text.alignment = TextAlignmentOptions.TopLeft;
             _text.color = Color.white;
-            _text.enableWordWrapping = false;
+            _text.enableWordWrapping = true;
+            _text.overflowMode = TextOverflowModes.Overflow;
             _text.text = "GameContext Debug Panel";
         }
 
@@ -272,6 +301,7 @@ namespace OneManJourney.Runtime
             _builder.AppendLine($"Card Pool: {_context.CardPool.Count}");
             _builder.AppendLine($"Event Pool: {_context.EventPool.Count}");
             AppendJourneyMapSummary(_context.JourneyMap);
+            AppendJourneyProgressSummary(_context);
             _builder.AppendLine();
             _builder.AppendLine("Resources:");
 
@@ -307,6 +337,44 @@ namespace OneManJourney.Runtime
             }
 
             _text.text = _builder.ToString();
+        }
+
+        private void AppendJourneyProgressSummary(GameContext context)
+        {
+            _builder.AppendLine();
+            _builder.AppendLine("Journey Progress:");
+            _builder.AppendLine($"- Food Cost / Move: {context.FoodCostPerAdvance}");
+            if (context.HasActiveJourneyEncounter)
+            {
+                _builder.AppendLine($"- Active Encounter: Node {context.ActiveJourneyNodeId} ({context.ActiveJourneyNodeType})");
+                if (!string.IsNullOrWhiteSpace(context.ActiveJourneySceneName))
+                {
+                    _builder.AppendLine($"- Scene: {context.ActiveJourneySceneName}");
+                }
+            }
+            else
+            {
+                _builder.AppendLine("- Active Encounter: None");
+            }
+
+            if (!string.IsNullOrWhiteSpace(context.LastJourneyAdvanceBlockMessage))
+            {
+                _builder.AppendLine($"- Blocked: {context.LastJourneyAdvanceBlockMessage}");
+            }
+
+            IReadOnlyList<JourneyMapNode> nextNodes = context.GetAvailableNextJourneyNodes();
+            if (nextNodes.Count == 0)
+            {
+                _builder.AppendLine("- Next Nodes: None");
+                return;
+            }
+
+            _builder.AppendLine("- Next Nodes:");
+            for (int i = 0; i < nextNodes.Count; i++)
+            {
+                JourneyMapNode node = nextNodes[i];
+                _builder.AppendLine($"  - #{node.Id} ({node.NodeType})");
+            }
         }
 
         private void AppendJourneyMapSummary(JourneyMap journeyMap)

@@ -101,4 +101,66 @@ namespace OneManJourney.Runtime
         public int SupplyNodeCount { get; }
         public int BossNodeCount { get; }
     }
+
+    public enum JourneyAdvanceBlockReason
+    {
+        None = 0,
+        MissingMap,
+        MissingCurrentNode,
+        MissingTargetNode,
+        InvalidPath,
+        EncounterAlreadyActive,
+        EncounterNotActive,
+        InsufficientFood
+    }
+
+    public readonly struct JourneyNodeEnteredEvent
+    {
+        public JourneyNodeEnteredEvent(int previousNodeId, int targetNodeId, JourneyNodeType nodeType, string sceneName)
+        {
+            PreviousNodeId = previousNodeId;
+            TargetNodeId = targetNodeId;
+            NodeType = nodeType;
+            SceneName = sceneName ?? string.Empty;
+        }
+
+        public int PreviousNodeId { get; }
+        public int TargetNodeId { get; }
+        public JourneyNodeType NodeType { get; }
+        public string SceneName { get; }
+    }
+
+    public readonly struct JourneyNodeCompletedEvent
+    {
+        public JourneyNodeCompletedEvent(int nodeId, JourneyNodeType nodeType, int foodCost, int foodBefore, int foodAfter)
+        {
+            NodeId = nodeId;
+            NodeType = nodeType;
+            FoodCost = foodCost;
+            FoodBefore = foodBefore;
+            FoodAfter = foodAfter;
+        }
+
+        public int NodeId { get; }
+        public JourneyNodeType NodeType { get; }
+        public int FoodCost { get; }
+        public int FoodBefore { get; }
+        public int FoodAfter { get; }
+    }
+
+    public readonly struct JourneyAdvanceBlockedEvent
+    {
+        public JourneyAdvanceBlockedEvent(JourneyAdvanceBlockReason reason, string message, int currentNodeId, int foodAmount)
+        {
+            Reason = reason;
+            Message = message ?? string.Empty;
+            CurrentNodeId = currentNodeId;
+            FoodAmount = foodAmount;
+        }
+
+        public JourneyAdvanceBlockReason Reason { get; }
+        public string Message { get; }
+        public int CurrentNodeId { get; }
+        public int FoodAmount { get; }
+    }
 }

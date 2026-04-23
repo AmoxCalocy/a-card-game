@@ -18,6 +18,13 @@ namespace OneManJourney.Runtime
         [SerializeField] private bool _autoLoadEditorData = true;
         [Header("Journey Map")]
         [SerializeField] private JourneyMapGenerationConfig _journeyMapGenerationConfig = new JourneyMapGenerationConfig();
+        [Header("Journey Progress")]
+        [Min(1)]
+        [SerializeField] private int _foodCostPerAdvance = 1;
+        [SerializeField] private string _battleSceneName = "BattleScene";
+        [SerializeField] private string _eventSceneName = "EventScene";
+        [SerializeField] private string _supplySceneName = "SupplyScene";
+        [SerializeField] private string _bossSceneName = "BossScene";
 
         private readonly Dictionary<ResourceType, int> _resources = new Dictionary<ResourceType, int>();
         private readonly List<CardConfig> _cardPool = new List<CardConfig>();
@@ -25,6 +32,10 @@ namespace OneManJourney.Runtime
         private GameEventBus _eventBus;
         private JourneyMap _journeyMap;
         private bool _isInitialized;
+        private int _activeJourneyNodeId = -1;
+        private JourneyNodeType _activeJourneyNodeType = JourneyNodeType.Battle;
+        private string _activeJourneySceneName = string.Empty;
+        private string _lastJourneyAdvanceBlockMessage = string.Empty;
 
         public static GameContext Instance { get; private set; }
 
@@ -37,6 +48,12 @@ namespace OneManJourney.Runtime
         public IReadOnlyList<EventConfig> EventPool => _eventPool;
         public GameEventBus EventBus => _eventBus;
         public JourneyMap JourneyMap => _journeyMap;
+        public int FoodCostPerAdvance => Mathf.Max(1, _foodCostPerAdvance);
+        public bool HasActiveJourneyEncounter => _activeJourneyNodeId >= 0;
+        public int ActiveJourneyNodeId => _activeJourneyNodeId;
+        public JourneyNodeType ActiveJourneyNodeType => _activeJourneyNodeType;
+        public string ActiveJourneySceneName => _activeJourneySceneName;
+        public string LastJourneyAdvanceBlockMessage => _lastJourneyAdvanceBlockMessage;
         // Avoid Unity API calls during MonoBehaviour construction/field initialization.
         public JourneyState JourneyState { get; private set; } = new JourneyState();
 
@@ -84,6 +101,8 @@ namespace OneManJourney.Runtime
             JourneyState = JourneyState.CreateDefault();
             JourneyState.CrisisValue = GetResource(ResourceType.Crisis);
             BuildJourneyMap(JourneyState.RunSeed);
+            ResetJourneyEncounterState();
+            ClearJourneyAdvanceBlockMessage();
 
             _isInitialized = true;
             Initialized?.Invoke();
@@ -162,7 +181,177 @@ namespace OneManJourney.Runtime
 
         public void AdvanceNode()
         {
-            SetJourneyProgress(JourneyState.Chapter, JourneyState.NodeIndex + 1, JourneyState.NodesVisited + 1);
+            if (!TryGetCurrentJourneyNode(out JourneyMapNode currentNode) || currentNode.NextNodeIds.Count == 0)
+            {
+                return;
+            }
+
+            if (!TryEnterNextJourneyNode(currentNode.NextNodeIds[0], out _))
+            {
+                return;
+            }
+
+            TryCompleteActiveJourneyNode(out _);
+        }
+
+        public bool TryGetJourneyNode(int nodeId, out JourneyMapNode node)
+        {
+            if (_journeyMap == null)
+            {
+                node = null;
+                return false;
+            }
+
+            return _journeyMap.TryGetNode(nodeId, out node);
+        }
+
+        public bool TryGetCurrentJourneyNode(out JourneyMapNode node)
+        {
+            return TryGetJourneyNode(JourneyState.NodeIndex, out node);
+        }
+
+        public IReadOnlyList<JourneyMapNode> GetAvailableNextJourneyNodes()
+        {
+            var nextNodes = new List<JourneyMapNode>();
+            if (!TryGetCurrentJourneyNode(out JourneyMapNode currentNode))
+            {
+                return nextNodes;
+            }
+
+            IReadOnlyList<int> nextNodeIds = currentNode.NextNodeIds;
+            for (int i = 0; i < nextNodeIds.Count; i++)
+            {
+                int nodeId = nextNodeIds[i];
+                if (TryGetJourneyNode(nodeId, out JourneyMapNode nextNode))
+                {
+                    nextNodes.Add(nextNode);
+                }
+            }
+
+            return nextNodes;
+        }
+
+        public bool TryEnterNextJourneyNode(int targetNodeId, out string blockMessage)
+        {
+            if (HasActiveJourneyEncounter)
+            {
+                return BlockJourneyAdvance(
+                    JourneyAdvanceBlockReason.EncounterAlreadyActive,
+                    "A node encounter is already active. Complete it before selecting another path.",
+                    out blockMessage);
+            }
+
+            if (_journeyMap == null)
+            {
+                return BlockJourneyAdvance(
+                    JourneyAdvanceBlockReason.MissingMap,
+                    "Journey map is not generated yet.",
+                    out blockMessage);
+            }
+
+            if (!TryGetCurrentJourneyNode(out JourneyMapNode currentNode))
+            {
+                return BlockJourneyAdvance(
+                    JourneyAdvanceBlockReason.MissingCurrentNode,
+                    "Current journey node is missing from the map.",
+                    out blockMessage);
+            }
+
+            if (GetResource(ResourceType.Food) <= 0)
+            {
+                return BlockJourneyAdvance(
+                    JourneyAdvanceBlockReason.InsufficientFood,
+                    "Food is depleted. You cannot advance to the next node.",
+                    out blockMessage);
+            }
+
+            bool isConnected = false;
+            for (int i = 0; i < currentNode.NextNodeIds.Count; i++)
+            {
+                if (currentNode.NextNodeIds[i] == targetNodeId)
+                {
+                    isConnected = true;
+                    break;
+                }
+            }
+
+            if (!isConnected)
+            {
+                return BlockJourneyAdvance(
+                    JourneyAdvanceBlockReason.InvalidPath,
+                    $"Node {targetNodeId} is not connected to current node {currentNode.Id}.",
+                    out blockMessage);
+            }
+
+            if (!TryGetJourneyNode(targetNodeId, out JourneyMapNode targetNode))
+            {
+                return BlockJourneyAdvance(
+                    JourneyAdvanceBlockReason.MissingTargetNode,
+                    $"Target node {targetNodeId} does not exist.",
+                    out blockMessage);
+            }
+
+            _activeJourneyNodeId = targetNode.Id;
+            _activeJourneyNodeType = targetNode.NodeType;
+            _activeJourneySceneName = ResolveJourneySceneName(targetNode.NodeType);
+            ClearJourneyAdvanceBlockMessage();
+
+            Publish(new JourneyNodeEnteredEvent(
+                currentNode.Id,
+                targetNode.Id,
+                targetNode.NodeType,
+                _activeJourneySceneName));
+            NotifyStateChanged();
+
+            blockMessage = string.Empty;
+            return true;
+        }
+
+        public bool TryCompleteActiveJourneyNode(out string blockMessage)
+        {
+            if (!HasActiveJourneyEncounter)
+            {
+                return BlockJourneyAdvance(
+                    JourneyAdvanceBlockReason.EncounterNotActive,
+                    "No active node encounter to complete.",
+                    out blockMessage);
+            }
+
+            int completedNodeId = _activeJourneyNodeId;
+            JourneyNodeType completedNodeType = _activeJourneyNodeType;
+            int foodBefore = GetResource(ResourceType.Food);
+            int foodCost = FoodCostPerAdvance;
+
+            SetJourneyProgress(
+                JourneyState.Chapter,
+                completedNodeId,
+                JourneyState.NodesVisited + 1);
+
+            AddResource(ResourceType.Food, -foodCost);
+            int foodAfter = GetResource(ResourceType.Food);
+
+            ResetJourneyEncounterState();
+            Publish(new JourneyNodeCompletedEvent(completedNodeId, completedNodeType, foodCost, foodBefore, foodAfter));
+            NotifyStateChanged();
+
+            if (foodAfter <= 0)
+            {
+                string depletionMessage = "Food is depleted. You cannot advance to the next node.";
+                _lastJourneyAdvanceBlockMessage = depletionMessage;
+                Publish(new JourneyAdvanceBlockedEvent(
+                    JourneyAdvanceBlockReason.InsufficientFood,
+                    depletionMessage,
+                    JourneyState.NodeIndex,
+                    foodAfter));
+                NotifyStateChanged();
+            }
+            else
+            {
+                ClearJourneyAdvanceBlockMessage();
+            }
+
+            blockMessage = string.Empty;
+            return true;
         }
 
         public bool TryDrawCard(out CardConfig card)
@@ -203,6 +392,9 @@ namespace OneManJourney.Runtime
         {
             BuildJourneyMap(seed);
             JourneyState.RunSeed = seed;
+            JourneyState.NodeIndex = 0;
+            ResetJourneyEncounterState();
+            ClearJourneyAdvanceBlockMessage();
             Publish(new JourneyMapGeneratedEvent(_journeyMap));
             NotifyStateChanged();
         }
@@ -272,6 +464,43 @@ namespace OneManJourney.Runtime
         private void BuildJourneyMap(int seed)
         {
             _journeyMap = JourneyMapGenerator.Generate(seed, _journeyMapGenerationConfig);
+        }
+
+        private string ResolveJourneySceneName(JourneyNodeType nodeType)
+        {
+            return nodeType switch
+            {
+                JourneyNodeType.Battle => _battleSceneName,
+                JourneyNodeType.Event => _eventSceneName,
+                JourneyNodeType.Supply => _supplySceneName,
+                JourneyNodeType.Boss => _bossSceneName,
+                _ => string.Empty
+            };
+        }
+
+        private bool BlockJourneyAdvance(JourneyAdvanceBlockReason reason, string message, out string blockMessage)
+        {
+            _lastJourneyAdvanceBlockMessage = message ?? string.Empty;
+            Publish(new JourneyAdvanceBlockedEvent(
+                reason,
+                _lastJourneyAdvanceBlockMessage,
+                JourneyState.NodeIndex,
+                GetResource(ResourceType.Food)));
+            NotifyStateChanged();
+            blockMessage = _lastJourneyAdvanceBlockMessage;
+            return false;
+        }
+
+        private void ResetJourneyEncounterState()
+        {
+            _activeJourneyNodeId = -1;
+            _activeJourneyNodeType = JourneyNodeType.Battle;
+            _activeJourneySceneName = string.Empty;
+        }
+
+        private void ClearJourneyAdvanceBlockMessage()
+        {
+            _lastJourneyAdvanceBlockMessage = string.Empty;
         }
 
         private void Publish<TEvent>(TEvent gameEvent)

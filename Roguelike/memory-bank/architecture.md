@@ -126,3 +126,52 @@
   - 日志示例：`Step7TestDriver Event: MapGenerated seed=1668988292, nodes=14, routes=16, branchingNodes=10, battle/event/supply/boss=7/3/3/1.`
   - 节点数满足 `>=10`，且路线数 `>=2`，存在有效分支节点。
   - 验证结论：第7步验收通过。
+
+## 旅途推进层（2026-04-23，实施计划第8步）
+- 目标：把“地图分支”从静态结构升级为可交互流程，形成“选择节点 -> 进入对应场景 -> 完成节点 -> 扣粮并推进”的可验证闭环。
+- 关键架构洞察：
+  - 采用“进入节点”和“完成节点”双阶段模型，避免将“点击节点”与“推进结算”耦合在同一帧，便于后续接入战斗/事件结算界面。
+  - 场景切换由事件驱动（`JourneyNodeEnteredEvent`）而非直接硬编码调用，使流程可替换、可测试、可观测。
+  - 断粮阻断抽象为统一消息（`JourneyAdvanceBlockedEvent` + `JourneyAdvanceBlockReason`），UI 与日志不依赖具体业务函数。
+
+- 文件职责（第8步相关）：
+  - `Assets/Scripts/Core/GameContext.cs`
+    - 旅途推进聚合根：维护当前节点、激活遭遇节点、可选下一节点查询、粮食消耗与阻断校验。
+    - 对外暴露 `TryEnterNextJourneyNode`、`TryCompleteActiveJourneyNode`、`GetAvailableNextJourneyNodes` 等接口。
+    - 发布第8步推进相关事件，保证调试层与场景路由层解耦。
+  - `Assets/Scripts/Core/GameEventMessages.cs`
+    - 定义第8步事件契约：节点进入、节点完成、推进阻断。
+    - 定义阻断原因枚举，统一“无粮/路径非法/状态非法”等语义。
+  - `Assets/Scripts/Core/JourneyMap.cs`
+    - 在原节点列表基础上新增 ID 快速查询能力（`TryGetNode`），支撑当前节点与目标节点合法性判断。
+  - `Assets/Scripts/Core/JourneyNodeSceneRouter.cs`
+    - 运行时场景路由器：订阅 `JourneyNodeEnteredEvent`，按节点类型映射场景名并尝试切换。
+    - 仅负责路由，不负责推进结算，遵循单一职责。
+  - `Assets/Scripts/Core/GameContextBootstrap.cs`
+    - 启动引导扩展：确保路由器与上下文、调试面板一起自动注入，降低手工挂载负担。
+  - `Assets/Scripts/Core/GameContextDebugPanel.cs`
+    - 第8步观测面板：新增推进状态、可选节点、阻断原因显示；字体与换行优化，便于长文本调试。
+  - `Assets/Scripts/Core/GameContextStep8TestDriver.cs`
+    - 第8步验收驱动：提供按钮/热键触发进入节点、完成节点与断粮场景。
+    - 通过 `DontDestroyOnLoad` 保持跨场景可操作性，避免切场景后测试入口丢失。
+
+- 生命周期与数据流（第8步）：
+  - `GameContext` 初始化并生成地图后，玩家从当前节点读取可选下一节点。
+  - 选择下一节点时调用 `TryEnterNextJourneyNode`：
+    - 校验地图、路径连通与粮食；失败发布 `JourneyAdvanceBlockedEvent`。
+    - 成功记录激活遭遇并发布 `JourneyNodeEnteredEvent`。
+  - `JourneyNodeSceneRouter` 接收进入事件后加载对应场景（若已在该场景或未配置则跳过/告警）。
+  - 节点内容完成时调用 `TryCompleteActiveJourneyNode`：推进 `JourneyState.NodeIndex/NodesVisited`，扣除粮食，发布 `JourneyNodeCompletedEvent`；若粮食归零再发布阻断事件。
+
+- 边界与后续：
+  - 本层不包含危机值递增与灾害强制触发逻辑（实施计划第9步范围）。
+  - 当前进入节点后看到蓝色背景属于占位测试场景默认视觉结果，符合第8步“可切场景可推进”的验收目标。
+
+## 第8步验证状态（2026-04-23）
+- 验证环境：Unity 2022.3.62f2c1，`Assets/Scenes/SampleScene.unity` + 占位节点场景。
+- 验证方法：使用 `GameContextStep8TestDriver` 点击/热键选择分支节点，完成节点结算，并构造断粮场景。
+- 验证结果：
+  - 点击节点可触发 `JourneyNodeEnteredEvent` 并进入对应场景。
+  - 完成节点后可触发 `JourneyNodeCompletedEvent`，`NodeIndex` 推进、`NodesVisited` 增加、粮食按步扣减。
+  - 粮食归零后触发 `JourneyAdvanceBlockedEvent(InsufficientFood)`，前进被禁止并显示提示。
+  - 验证结论：第8步验收通过。

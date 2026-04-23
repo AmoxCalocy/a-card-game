@@ -80,6 +80,7 @@ namespace OneManJourney.Runtime
     {
         private readonly List<JourneyMapNode> _nodes;
         private readonly Dictionary<JourneyNodeType, int> _typeCounts;
+        private readonly Dictionary<int, JourneyMapNode> _nodesById;
 
         public JourneyMap(int seed, List<JourneyMapNode> nodes, int routeCount, int branchingNodeCount)
         {
@@ -88,6 +89,7 @@ namespace OneManJourney.Runtime
             RouteCount = Mathf.Max(0, routeCount);
             BranchingNodeCount = Mathf.Max(0, branchingNodeCount);
             _typeCounts = BuildTypeCounts(_nodes);
+            _nodesById = BuildNodeLookup(_nodes);
         }
 
         public int Seed { get; }
@@ -100,6 +102,11 @@ namespace OneManJourney.Runtime
             return _typeCounts.TryGetValue(nodeType, out int count) ? count : 0;
         }
 
+        public bool TryGetNode(int nodeId, out JourneyMapNode node)
+        {
+            return _nodesById.TryGetValue(nodeId, out node);
+        }
+
         private static Dictionary<JourneyNodeType, int> BuildTypeCounts(IReadOnlyList<JourneyMapNode> nodes)
         {
             var counts = new Dictionary<JourneyNodeType, int>();
@@ -110,6 +117,18 @@ namespace OneManJourney.Runtime
             }
 
             return counts;
+        }
+
+        private static Dictionary<int, JourneyMapNode> BuildNodeLookup(IReadOnlyList<JourneyMapNode> nodes)
+        {
+            var lookup = new Dictionary<int, JourneyMapNode>(nodes.Count);
+            for (int i = 0; i < nodes.Count; i++)
+            {
+                JourneyMapNode node = nodes[i];
+                lookup[node.Id] = node;
+            }
+
+            return lookup;
         }
     }
 }
