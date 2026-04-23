@@ -1,0 +1,140 @@
+name: CI - Unity Build
+
+on:
+  pull_request:
+    branches:
+      - dev
+      - main
+  workflow_dispatch:
+    inputs:
+      unity_version:
+        description: "Unity version override (e.g. 2022.3.62f2c1). Leave empty to auto-detect from ProjectVersion.txt."
+        required: false
+        type: string
+      target_platform:
+        description: "Unity target platform"
+        required: false
+        default: StandaloneWindows64
+        type: choice
+        options:
+          - StandaloneWindows64
+
+concurrency:
+  group: ci-build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    name: Build Windows (Standalone)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+      UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+      UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+      UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+      UNITY_LICENSING_SERVER: ${{ secrets.UNITY_LICENSING_SERVER }}
+      BUILD_NAME: roguelike-win
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Resolve Unity version and target platform
+        id: resolve
+        shell: bash
+        run: |
+          set -euo pipefail
+          PROJECT_VERSION="$(grep 'm_EditorVersion:' ProjectSettings/ProjectVersion.txt | awk '{print $2}')"
+          INPUT_VERSION="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.unity_version || '' }}"
+          INPUT_PLATFORM="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.target_platform || '' }}"
+
+          if [ -n "$INPUT_VERSION" ]; then
+            UNITY_VERSION="$INPUT_VERSION"
+          else
+            UNITY_VERSION="$PROJECT_VERSION"
+          fi
+
+          if [ -n "$INPUT_PLATFORM" ]; then
+            TARGET_PLATFORM="$INPUT_PLATFORM"
+          else
+            TARGET_PLATFORM="StandaloneWindows64"
+          fi
+
+          echo "Resolved ProjectVersion.txt -> $PROJECT_VERSION"
+          echo "Unity build version -> $UNITY_VERSION"
+          echo "Target platform -> $TARGET_PLATFORM"
+
+          echo "UNITY_VERSION=$UNITY_VERSION" >> "$GITHUB_ENV"
+          echo "TARGET_PLATFORM=$TARGET_PLATFORM" >> "$GITHUB_ENV"
+          echo "unity_version=$UNITY_VERSION" >> "$GITHUB_OUTPUT"
+          echo "target_platform=$TARGET_PLATFORM" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Library
+        uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-${{ runner.os }}-${{ steps.resolve.outputs.unity_version }}-${{ hashFiles('ProjectSettings/ProjectVersion.txt', '**/Packages/packages-lock.json') }}
+          restore-keys: |
+            Library-${{ runner.os }}-${{ steps.resolve.outputs.unity_version }}-
+            Library-${{ runner.os }}-
+
+      - name: Ensure logs folder
+        run: mkdir -p Logs
+
+      - name: Verify Unity license secret
+        run: |
+          if [ -n "${UNITY_LICENSING_SERVER}" ]; then
+            echo "Using UNITY_LICENSING_SERVER activation strategy."
+            exit 0
+          fi
+
+          if [ -z "${UNITY_EMAIL}" ] || [ -z "${UNITY_PASSWORD}" ]; then
+            echo "UNITY_EMAIL and UNITY_PASSWORD are required for game-ci activation." >&2
+            exit 1
+          fi
+
+          if [ -z "${UNITY_LICENSE}" ] && [ -z "${UNITY_SERIAL}" ]; then
+            echo "Provide either UNITY_LICENSE or UNITY_SERIAL (with UNITY_EMAIL/UNITY_PASSWORD)." >&2
+            exit 1
+          fi
+
+          echo "Using credential activation strategy (email/password + license or serial)."
+
+      - name: Build (StandaloneWindows64)
+        uses: game-ci/unity-builder@v4
+        with:
+          projectPath: .
+          unityVersion: ${{ steps.resolve.outputs.unity_version }}
+          targetPlatform: ${{ steps.resolve.outputs.target_platform }}
+          buildsPath: build
+          buildName: ${{ env.BUILD_NAME }}
+          allowDirtyBuild: true
+          customParameters: -logFile Logs/ci-build.log
+
+      - name: Upload build artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.BUILD_NAME }}-${{ steps.resolve.outputs.target_platform }}
+          path: build/${{ steps.resolve.outputs.target_platform }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unity-logs
+          path: |
+            Logs/**
+            build/${{ steps.resolve.outputs.target_platform }}/**/*.log
+            /github/home/.config/unity3d/Unity/Editor/*.log
+            /github/home/.local/share/unity3d/Unity/Editor/*.log
+          if-no-files-found: ignore
+          retention-days: 14

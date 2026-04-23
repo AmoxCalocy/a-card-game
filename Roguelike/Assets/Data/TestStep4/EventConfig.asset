@@ -1,0 +1,628 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6abac9cf2deb4f25a3fa9a8a21c323bf, type: 3}
+  m_Name: EventConfig
+  m_EditorClassIdentifier: 
+  _id: event.id
+  _displayName: New Event
+  _description: 
+  _options:
+  - _optionId: 
+    _title: 
+    _description: 
+    _resolutionType: 0
+    _successChance: 0.5
+    _costs:
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    _rewards:
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    - Type: 0
+      Amount: 0
+    _requiredReputation: 0
+    _sacrificeCardCount: 0
+    _recruitedCompanion: {fileID: 11400000, guid: c4ec1f3435ef40e44b18bd275a35966e, type: 2}

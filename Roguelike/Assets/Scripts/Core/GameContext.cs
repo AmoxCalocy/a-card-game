@@ -1,0 +1,573 @@
+using System;
+using System.Collections.Generic;
+using OneManJourney.Data;
+using UnityEngine;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
+
+namespace OneManJourney.Runtime
+{
+    [DisallowMultipleComponent]
+    public sealed class GameContext : MonoBehaviour
+    {
+        [Header("Initial Data (Optional)")]
+        [SerializeField] private ResourceTableConfig _resourceTable;
+        [SerializeField] private List<CardConfig> _startingCardPool = new List<CardConfig>();
+        [SerializeField] private List<EventConfig> _startingEventPool = new List<EventConfig>();
+        [SerializeField] private bool _autoLoadEditorData = true;
+        [Header("Journey Map")]
+        [SerializeField] private JourneyMapGenerationConfig _journeyMapGenerationConfig = new JourneyMapGenerationConfig();
+        [Header("Journey Progress")]
+        [Min(1)]
+        [SerializeField] private int _foodCostPerAdvance = 1;
+        [SerializeField] private string _battleSceneName = "BattleScene";
+        [SerializeField] private string _eventSceneName = "EventScene";
+        [SerializeField] private string _supplySceneName = "SupplyScene";
+        [SerializeField] private string _bossSceneName = "BossScene";
+
+        private readonly Dictionary<ResourceType, int> _resources = new Dictionary<ResourceType, int>();
+        private readonly List<CardConfig> _cardPool = new List<CardConfig>();
+        private readonly List<EventConfig> _eventPool = new List<EventConfig>();
+        private GameEventBus _eventBus;
+        private JourneyMap _journeyMap;
+        private bool _isInitialized;
+        private int _activeJourneyNodeId = -1;
+        private JourneyNodeType _activeJourneyNodeType = JourneyNodeType.Battle;
+        private string _activeJourneySceneName = string.Empty;
+        private string _lastJourneyAdvanceBlockMessage = string.Empty;
+
+        public static GameContext Instance { get; private set; }
+
+        public event Action Initialized;
+        public event Action StateChanged;
+
+        public ResourceTableConfig ResourceTable => _resourceTable;
+        public IReadOnlyDictionary<ResourceType, int> Resources => _resources;
+        public IReadOnlyList<CardConfig> CardPool => _cardPool;
+        public IReadOnlyList<EventConfig> EventPool => _eventPool;
+        public GameEventBus EventBus => _eventBus;
+        public JourneyMap JourneyMap => _journeyMap;
+        public int FoodCostPerAdvance => Mathf.Max(1, _foodCostPerAdvance);
+        public bool HasActiveJourneyEncounter => _activeJourneyNodeId >= 0;
+        public int ActiveJourneyNodeId => _activeJourneyNodeId;
+        public JourneyNodeType ActiveJourneyNodeType => _activeJourneyNodeType;
+        public string ActiveJourneySceneName => _activeJourneySceneName;
+        public string LastJourneyAdvanceBlockMessage => _lastJourneyAdvanceBlockMessage;
+        // Avoid Unity API calls during MonoBehaviour construction/field initialization.
+        public JourneyState JourneyState { get; private set; } = new JourneyState();
+
+        private void Awake()
+        {
+            if (Instance != null && Instance != this)
+            {
+                Destroy(gameObject);
+                return;
+            }
+
+            Instance = this;
+            DontDestroyOnLoad(gameObject);
+            GameServices.Register(this);
+            _eventBus = new GameEventBus();
+            GameServices.Register(_eventBus);
+            Initialize();
+        }
+
+        private void OnDestroy()
+        {
+            if (Instance != this)
+            {
+                return;
+            }
+
+            GameServices.Unregister<GameContext>();
+            GameServices.Unregister<GameEventBus>();
+            _eventBus?.Clear();
+            _eventBus = null;
+            Instance = null;
+        }
+
+        public void Initialize()
+        {
+            if (_isInitialized)
+            {
+                return;
+            }
+
+            LoadDefaultsIfNeeded();
+            BuildResources();
+            BuildPools();
+
+            JourneyState = JourneyState.CreateDefault();
+            JourneyState.CrisisValue = GetResource(ResourceType.Crisis);
+            BuildJourneyMap(JourneyState.RunSeed);
+            ResetJourneyEncounterState();
+            ClearJourneyAdvanceBlockMessage();
+
+            _isInitialized = true;
+            Initialized?.Invoke();
+            Publish(new GameContextInitializedEvent(
+                JourneyState.Chapter,
+                JourneyState.NodeIndex,
+                JourneyState.NodesVisited,
+                JourneyState.CrisisValue,
+                _cardPool.Count,
+                _eventPool.Count));
+            Publish(new JourneyMapGeneratedEvent(_journeyMap));
+            NotifyStateChanged();
+        }
+
+        public int GetResource(ResourceType type)
+        {
+            return _resources.TryGetValue(type, out int amount) ? amount : 0;
+        }
+
+        public void SetResource(ResourceType type, int amount)
+        {
+            int previousAmount = GetResource(type);
+            if (type != ResourceType.Crisis && amount < 0)
+            {
+                amount = 0;
+            }
+
+            if (type == ResourceType.Crisis)
+            {
+                JourneyState.CrisisValue = amount;
+            }
+
+            if (previousAmount == amount)
+            {
+                return;
+            }
+
+            _resources[type] = amount;
+
+            Publish(new ResourceChangedEvent(type, previousAmount, amount));
+            NotifyStateChanged();
+        }
+
+        public void AddResource(ResourceType type, int delta)
+        {
+            int next = GetResource(type) + delta;
+            SetResource(type, next);
+        }
+
+        public void SetJourneyProgress(int chapter, int nodeIndex, int nodesVisited)
+        {
+            int previousChapter = JourneyState.Chapter;
+            int previousNodeIndex = JourneyState.NodeIndex;
+            int previousNodesVisited = JourneyState.NodesVisited;
+
+            JourneyState.Chapter = chapter;
+            JourneyState.NodeIndex = nodeIndex;
+            JourneyState.NodesVisited = nodesVisited;
+
+            if (previousChapter == JourneyState.Chapter
+                && previousNodeIndex == JourneyState.NodeIndex
+                && previousNodesVisited == JourneyState.NodesVisited)
+            {
+                return;
+            }
+
+            Publish(new NodeSelectedEvent(
+                previousChapter,
+                previousNodeIndex,
+                previousNodesVisited,
+                JourneyState.Chapter,
+                JourneyState.NodeIndex,
+                JourneyState.NodesVisited));
+            NotifyStateChanged();
+        }
+
+        public void AdvanceNode()
+        {
+            if (!TryGetCurrentJourneyNode(out JourneyMapNode currentNode) || currentNode.NextNodeIds.Count == 0)
+            {
+                return;
+            }
+
+            if (!TryEnterNextJourneyNode(currentNode.NextNodeIds[0], out _))
+            {
+                return;
+            }
+
+            TryCompleteActiveJourneyNode(out _);
+        }
+
+        public bool TryGetJourneyNode(int nodeId, out JourneyMapNode node)
+        {
+            if (_journeyMap == null)
+            {
+                node = null;
+                return false;
+            }
+
+            return _journeyMap.TryGetNode(nodeId, out node);
+        }
+
+        public bool TryGetCurrentJourneyNode(out JourneyMapNode node)
+        {
+            return TryGetJourneyNode(JourneyState.NodeIndex, out node);
+        }
+
+        public IReadOnlyList<JourneyMapNode> GetAvailableNextJourneyNodes()
+        {
+            var nextNodes = new List<JourneyMapNode>();
+            if (!TryGetCurrentJourneyNode(out JourneyMapNode currentNode))
+            {
+                return nextNodes;
+            }
+
+            IReadOnlyList<int> nextNodeIds = currentNode.NextNodeIds;
+            for (int i = 0; i < nextNodeIds.Count; i++)
+            {
+                int nodeId = nextNodeIds[i];
+                if (TryGetJourneyNode(nodeId, out JourneyMapNode nextNode))
+                {
+                    nextNodes.Add(nextNode);
+                }
+            }
+
+            return nextNodes;
+        }
+
+        public bool TryEnterNextJourneyNode(int targetNodeId, out string blockMessage)
+        {
+            if (HasActiveJourneyEncounter)
+            {
+                return BlockJourneyAdvance(
+                    JourneyAdvanceBlockReason.EncounterAlreadyActive,
+                    "A node encounter is already active. Complete it before selecting another path.",
+                    out blockMessage);
+            }
+
+            if (_journeyMap == null)
+            {
+                return BlockJourneyAdvance(
+                    JourneyAdvanceBlockReason.MissingMap,
+                    "Journey map is not generated yet.",
+                    out blockMessage);
+            }
+
+            if (!TryGetCurrentJourneyNode(out JourneyMapNode currentNode))
+            {
+                return BlockJourneyAdvance(
+                    JourneyAdvanceBlockReason.MissingCurrentNode,
+                    "Current journey node is missing from the map.",
+                    out blockMessage);
+            }
+
+            if (GetResource(ResourceType.Food) <= 0)
+            {
+                return BlockJourneyAdvance(
+                    JourneyAdvanceBlockReason.InsufficientFood,
+                    "Food is depleted. You cannot advance to the next node.",
+                    out blockMessage);
+            }
+
+            bool isConnected = false;
+            for (int i = 0; i < currentNode.NextNodeIds.Count; i++)
+            {
+                if (currentNode.NextNodeIds[i] == targetNodeId)
+                {
+                    isConnected = true;
+                    break;
+                }
+            }
+
+            if (!isConnected)
+            {
+                return BlockJourneyAdvance(
+                    JourneyAdvanceBlockReason.InvalidPath,
+                    $"Node {targetNodeId} is not connected to current node {currentNode.Id}.",
+                    out blockMessage);
+            }
+
+            if (!TryGetJourneyNode(targetNodeId, out JourneyMapNode targetNode))
+            {
+                return BlockJourneyAdvance(
+                    JourneyAdvanceBlockReason.MissingTargetNode,
+                    $"Target node {targetNodeId} does not exist.",
+                    out blockMessage);
+            }
+
+            _activeJourneyNodeId = targetNode.Id;
+            _activeJourneyNodeType = targetNode.NodeType;
+            _activeJourneySceneName = ResolveJourneySceneName(targetNode.NodeType);
+            ClearJourneyAdvanceBlockMessage();
+
+            Publish(new JourneyNodeEnteredEvent(
+                currentNode.Id,
+                targetNode.Id,
+                targetNode.NodeType,
+                _activeJourneySceneName));
+            NotifyStateChanged();
+
+            blockMessage = string.Empty;
+            return true;
+        }
+
+        public bool TryCompleteActiveJourneyNode(out string blockMessage)
+        {
+            if (!HasActiveJourneyEncounter)
+            {
+                return BlockJourneyAdvance(
+                    JourneyAdvanceBlockReason.EncounterNotActive,
+                    "No active node encounter to complete.",
+                    out blockMessage);
+            }
+
+            int completedNodeId = _activeJourneyNodeId;
+            JourneyNodeType completedNodeType = _activeJourneyNodeType;
+            int foodBefore = GetResource(ResourceType.Food);
+            int foodCost = FoodCostPerAdvance;
+
+            SetJourneyProgress(
+                JourneyState.Chapter,
+                completedNodeId,
+                JourneyState.NodesVisited + 1);
+
+            AddResource(ResourceType.Food, -foodCost);
+            int foodAfter = GetResource(ResourceType.Food);
+
+            ResetJourneyEncounterState();
+            Publish(new JourneyNodeCompletedEvent(completedNodeId, completedNodeType, foodCost, foodBefore, foodAfter));
+            NotifyStateChanged();
+
+            if (foodAfter <= 0)
+            {
+                string depletionMessage = "Food is depleted. You cannot advance to the next node.";
+                _lastJourneyAdvanceBlockMessage = depletionMessage;
+                Publish(new JourneyAdvanceBlockedEvent(
+                    JourneyAdvanceBlockReason.InsufficientFood,
+                    depletionMessage,
+                    JourneyState.NodeIndex,
+                    foodAfter));
+                NotifyStateChanged();
+            }
+            else
+            {
+                ClearJourneyAdvanceBlockMessage();
+            }
+
+            blockMessage = string.Empty;
+            return true;
+        }
+
+        public bool TryDrawCard(out CardConfig card)
+        {
+            if (_cardPool.Count == 0)
+            {
+                card = null;
+                return false;
+            }
+
+            card = _cardPool[0];
+            _cardPool.RemoveAt(0);
+            Publish(new CardDrawnEvent(card, _cardPool.Count));
+            NotifyStateChanged();
+            return true;
+        }
+
+        public void SetCardPool(IEnumerable<CardConfig> cards)
+        {
+            _cardPool.Clear();
+            AddUniqueConfigs(_cardPool, cards);
+            NotifyStateChanged();
+        }
+
+        public void SetEventPool(IEnumerable<EventConfig> events)
+        {
+            _eventPool.Clear();
+            AddUniqueConfigs(_eventPool, events);
+            NotifyStateChanged();
+        }
+
+        public void RegenerateJourneyMap()
+        {
+            RegenerateJourneyMap(UnityEngine.Random.Range(int.MinValue, int.MaxValue));
+        }
+
+        public void RegenerateJourneyMap(int seed)
+        {
+            BuildJourneyMap(seed);
+            JourneyState.RunSeed = seed;
+            JourneyState.NodeIndex = 0;
+            ResetJourneyEncounterState();
+            ClearJourneyAdvanceBlockMessage();
+            Publish(new JourneyMapGeneratedEvent(_journeyMap));
+            NotifyStateChanged();
+        }
+
+        private void BuildResources()
+        {
+            _resources.Clear();
+            Array resourceTypes = Enum.GetValues(typeof(ResourceType));
+            for (int i = 0; i < resourceTypes.Length; i++)
+            {
+                ResourceType type = (ResourceType)resourceTypes.GetValue(i);
+                _resources[type] = 0;
+            }
+
+            if (_resourceTable == null)
+            {
+                return;
+            }
+
+            IReadOnlyList<ResourceAmount> startingResources = _resourceTable.StartingResources;
+            for (int i = 0; i < startingResources.Count; i++)
+            {
+                ResourceAmount value = startingResources[i];
+                _resources[value.Type] = GetResource(value.Type) + value.Amount;
+            }
+
+            _resources[ResourceType.Crisis] = _resourceTable.StartingCrisis;
+        }
+
+        private void BuildPools()
+        {
+            _cardPool.Clear();
+            _eventPool.Clear();
+
+            AddUniqueConfigs(_cardPool, _startingCardPool);
+            AddUniqueConfigs(_eventPool, _startingEventPool);
+        }
+
+        private static void AddUniqueConfigs<T>(List<T> target, IEnumerable<T> source) where T : class
+        {
+            if (source == null)
+            {
+                return;
+            }
+
+            foreach (T asset in source)
+            {
+                if (asset == null || target.Contains(asset))
+                {
+                    continue;
+                }
+
+                target.Add(asset);
+            }
+        }
+
+        private void NotifyStateChanged()
+        {
+            if (!_isInitialized)
+            {
+                return;
+            }
+
+            StateChanged?.Invoke();
+        }
+
+        private void BuildJourneyMap(int seed)
+        {
+            _journeyMap = JourneyMapGenerator.Generate(seed, _journeyMapGenerationConfig);
+        }
+
+        private string ResolveJourneySceneName(JourneyNodeType nodeType)
+        {
+            return nodeType switch
+            {
+                JourneyNodeType.Battle => _battleSceneName,
+                JourneyNodeType.Event => _eventSceneName,
+                JourneyNodeType.Supply => _supplySceneName,
+                JourneyNodeType.Boss => _bossSceneName,
+                _ => string.Empty
+            };
+        }
+
+        private bool BlockJourneyAdvance(JourneyAdvanceBlockReason reason, string message, out string blockMessage)
+        {
+            _lastJourneyAdvanceBlockMessage = message ?? string.Empty;
+            Publish(new JourneyAdvanceBlockedEvent(
+                reason,
+                _lastJourneyAdvanceBlockMessage,
+                JourneyState.NodeIndex,
+                GetResource(ResourceType.Food)));
+            NotifyStateChanged();
+            blockMessage = _lastJourneyAdvanceBlockMessage;
+            return false;
+        }
+
+        private void ResetJourneyEncounterState()
+        {
+            _activeJourneyNodeId = -1;
+            _activeJourneyNodeType = JourneyNodeType.Battle;
+            _activeJourneySceneName = string.Empty;
+        }
+
+        private void ClearJourneyAdvanceBlockMessage()
+        {
+            _lastJourneyAdvanceBlockMessage = string.Empty;
+        }
+
+        private void Publish<TEvent>(TEvent gameEvent)
+        {
+            _eventBus?.Publish(gameEvent);
+        }
+
+        private void LoadDefaultsIfNeeded()
+        {
+            _startingCardPool.RemoveAll(card => card == null);
+            _startingEventPool.RemoveAll(gameEvent => gameEvent == null);
+
+#if UNITY_EDITOR
+            if (!_autoLoadEditorData)
+            {
+                return;
+            }
+
+            if (_resourceTable == null)
+            {
+                _resourceTable = LoadFirstAsset<ResourceTableConfig>();
+            }
+
+            if (_startingCardPool.Count == 0)
+            {
+                _startingCardPool = LoadAssets<CardConfig>();
+            }
+
+            if (_startingEventPool.Count == 0)
+            {
+                _startingEventPool = LoadAssets<EventConfig>();
+            }
+#endif
+        }
+
+#if UNITY_EDITOR
+        private static T LoadFirstAsset<T>() where T : ScriptableObject
+        {
+            List<T> assets = LoadAssets<T>();
+            return assets.Count > 0 ? assets[0] : null;
+        }
+
+        private static List<T> LoadAssets<T>() where T : ScriptableObject
+        {
+            string[] folder = { "Assets/Data" };
+            string[] guids = AssetDatabase.FindAssets($"t:{typeof(T).Name}", folder);
+            if (guids.Length == 0)
+            {
+                string[] allAssets = { "Assets" };
+                guids = AssetDatabase.FindAssets($"t:{typeof(T).Name}", allAssets);
+            }
+
+            List<T> results = new List<T>(guids.Length);
+            for (int i = 0; i < guids.Length; i++)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guids[i]);
+                T asset = AssetDatabase.LoadAssetAtPath<T>(path);
+                if (asset == null || results.Contains(asset))
+                {
+                    continue;
+                }
+
+                results.Add(asset);
+            }
+
+            return results;
+        }
+#endif
+    }
+}
