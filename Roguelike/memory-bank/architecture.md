@@ -175,3 +175,55 @@
   - 完成节点后可触发 `JourneyNodeCompletedEvent`，`NodeIndex` 推进、`NodesVisited` 增加、粮食按步扣减。
   - 粮食归零后触发 `JourneyAdvanceBlockedEvent(InsufficientFood)`，前进被禁止并显示提示。
   - 验证结论：第8步验收通过。
+
+## 危机与灾害触发层（2026-04-27，实施计划第9步）
+- 目标：把“危机值”从只读状态升级为流程驱动量，形成“节点推进累积危机 -> 跨阈值强制触发灾害事件”的可观测闭环。
+- 关键架构洞察：
+  - 继续沿用事件驱动：危机阈值触发只发布统一消息 `CrisisDisasterTriggeredEvent`，不在 `GameContext` 内直接执行灾害结算，避免与后续事件 UI/结算器耦合。
+  - 触发机制采用“基础阈值 + 固定步长”而不是单阈值布尔开关，支持长流程多次触发（如 6、12、18...）并可在 Inspector 调参。
+  - 灾害事件选择采用“优先灾害池、缺失时 fallback 普通事件池”的容错策略，保证测试与开发期不会因数据未配齐而中断流程。
+
+- 文件职责（第9步相关）：
+  - `Assets/Scripts/Core/GameContext.cs`
+    - 新增危机参数：`_crisisGainPerAdvance`、`_disasterTriggerThreshold`、`_disasterTriggerStep`。
+    - 在 `TryCompleteActiveJourneyNode` 内接入“每推进一节点增加危机值”。
+    - 在 `SetResource(ResourceType.Crisis, ...)` 内统一评估阈值跨越并触发灾害消息。
+    - 维护灾害运行时状态：`PendingDisasterEvent`、`PendingDisasterType`、`LastDisasterTriggerMessage`、`NextDisasterTriggerThreshold`。
+  - `Assets/Scripts/Core/GameEventMessages.cs`
+    - 新增 `CrisisDisasterTriggeredEvent`，承载危机值、阈值、触发事件、灾害类型与 fallback 标记。
+  - `Assets/Scripts/Data/ScriptableObjects/GameDataTypes.cs`
+    - 新增 `DisasterEventType` 枚举（`None`、`Plague`、`BanditRaid`、`NaturalDisaster`），统一灾害事件类型语义。
+  - `Assets/Scripts/Data/ScriptableObjects/EventConfig.cs`
+    - 新增 `IsDisasterEvent` 与 `DisasterType` 字段，使事件资产可被标记为灾害候选。
+  - `Assets/Scripts/Core/GameContextDebugPanel.cs`
+    - 新增危机系统摘要区，实时展示危机增长规则、触发阈值、下次触发点与最近一次灾害触发信息。
+    - 订阅 `CrisisDisasterTriggeredEvent`，确保灾害触发后 UI 即时刷新。
+  - `Assets/Scripts/Core/GameContextStep6TestDriver.cs`
+    - 增加第9步验收热键 `V`（将危机值拉到下一个阈值）与 `CrisisDisasterTriggeredEvent` 日志输出。
+    - 调整为 `DontDestroyOnLoad` 单例常驻，避免切场景后测试入口丢失。
+  - `Assets/Scripts/Core/GameContextStep7TestDriver.cs`
+    - 调整为 `DontDestroyOnLoad` 单例常驻，与 Step6 驱动一致，保障 Step8 场景往返时地图调试入口持续可用。
+  - `Assets/Data/TestStep4/EventConfig.asset`
+    - 测试资产增加灾害标记（`IsDisasterEvent=true`，`DisasterType=Plague`），用于第9步最小可验证样本。
+
+- 生命周期与数据流（第9步）：
+  - 完成节点时：`TryCompleteActiveJourneyNode` 扣粮后调用 `AddResource(ResourceType.Crisis, CrisisGainPerAdvance)`。
+  - 危机值写入时：`SetResource` 同步更新 `JourneyState.CrisisValue` 并调用 `EvaluateDisasterTrigger`。
+  - 阈值跨越时：`GameContext` 选择灾害事件并发布 `CrisisDisasterTriggeredEvent`，同时更新 `PendingDisasterEvent` 与调试消息。
+  - 调试观测：`GameContextDebugPanel` 与 Step6 驱动同步接收灾害消息并展示触发结果。
+
+- 边界与后续：
+  - 本层只负责“触发与广播”，不包含灾害事件执行器、卡组污染、战斗分流等结算逻辑（实施计划第23步范围）。
+  - `PendingDisasterEvent` 当前作为“待处理灾害上下文”，后续可由事件场景控制器消费并在结算后清理。
+
+## 第9步验证状态（2026-04-27）
+- 验证环境：Unity 2022.3.62f2c1，`Assets/Scenes/SampleScene.unity` + Step8 占位节点场景。
+- 验证方法：
+  - 推进节点验证危机值按步增长。
+  - 使用 Step6 驱动 `V` 热键将危机值拉高到阈值，观察强制灾害触发日志与调试面板状态。
+  - 进入/返回 Step8 节点场景后复测 Step6/Step7 面板与热键可用性。
+- 验证结果：
+  - 每完成一个节点危机值会增加，满足“每前进一节点增加危机值”。
+  - 危机值跨阈值后会发布 `CrisisDisasterTriggeredEvent`，灾害类型正确出现（示例：`Plague`）。
+  - Step8 场景往返后 Step6/Step7 调试入口持续可用（常驻对象修正生效）。
+  - 验证结论：第9步验收通过。

@@ -22,6 +22,7 @@ namespace OneManJourney.Runtime
         private IDisposable _journeyNodeEnteredSubscription;
         private IDisposable _journeyNodeCompletedSubscription;
         private IDisposable _journeyAdvanceBlockedSubscription;
+        private IDisposable _crisisDisasterTriggeredSubscription;
         private TextMeshProUGUI _text;
 
         private void Awake()
@@ -146,6 +147,7 @@ namespace OneManJourney.Runtime
             _journeyNodeEnteredSubscription = _eventBus.Subscribe<JourneyNodeEnteredEvent>(HandleJourneyNodeEntered);
             _journeyNodeCompletedSubscription = _eventBus.Subscribe<JourneyNodeCompletedEvent>(HandleJourneyNodeCompleted);
             _journeyAdvanceBlockedSubscription = _eventBus.Subscribe<JourneyAdvanceBlockedEvent>(HandleJourneyAdvanceBlocked);
+            _crisisDisasterTriggeredSubscription = _eventBus.Subscribe<CrisisDisasterTriggeredEvent>(HandleCrisisDisasterTriggered);
             return true;
         }
 
@@ -159,6 +161,7 @@ namespace OneManJourney.Runtime
             _journeyNodeEnteredSubscription?.Dispose();
             _journeyNodeCompletedSubscription?.Dispose();
             _journeyAdvanceBlockedSubscription?.Dispose();
+            _crisisDisasterTriggeredSubscription?.Dispose();
 
             _resourceChangedSubscription = null;
             _nodeSelectedSubscription = null;
@@ -168,6 +171,7 @@ namespace OneManJourney.Runtime
             _journeyNodeEnteredSubscription = null;
             _journeyNodeCompletedSubscription = null;
             _journeyAdvanceBlockedSubscription = null;
+            _crisisDisasterTriggeredSubscription = null;
             _eventBus = null;
         }
 
@@ -207,6 +211,11 @@ namespace OneManJourney.Runtime
         }
 
         private void HandleJourneyAdvanceBlocked(JourneyAdvanceBlockedEvent _)
+        {
+            Refresh();
+        }
+
+        private void HandleCrisisDisasterTriggered(CrisisDisasterTriggeredEvent _)
         {
             Refresh();
         }
@@ -300,6 +309,7 @@ namespace OneManJourney.Runtime
             _builder.AppendLine($"Crisis: {state.CrisisValue}");
             _builder.AppendLine($"Card Pool: {_context.CardPool.Count}");
             _builder.AppendLine($"Event Pool: {_context.EventPool.Count}");
+            AppendCrisisSummary(_context);
             AppendJourneyMapSummary(_context.JourneyMap);
             AppendJourneyProgressSummary(_context);
             _builder.AppendLine();
@@ -374,6 +384,30 @@ namespace OneManJourney.Runtime
             {
                 JourneyMapNode node = nextNodes[i];
                 _builder.AppendLine($"  - #{node.Id} ({node.NodeType})");
+            }
+        }
+
+        private void AppendCrisisSummary(GameContext context)
+        {
+            _builder.AppendLine();
+            _builder.AppendLine("Crisis System:");
+            _builder.AppendLine($"- Gain / Advance: {context.CrisisGainPerAdvance}");
+            _builder.AppendLine($"- Trigger Threshold: {context.DisasterTriggerThreshold}");
+            _builder.AppendLine($"- Trigger Step: {context.DisasterTriggerStep}");
+            _builder.AppendLine($"- Next Trigger At: {context.NextDisasterTriggerThreshold}");
+
+            if (context.PendingDisasterEvent == null)
+            {
+                _builder.AppendLine("- Pending Disaster: None");
+            }
+            else
+            {
+                _builder.AppendLine($"- Pending Disaster: {context.PendingDisasterEvent.DisplayName} ({context.PendingDisasterType})");
+            }
+
+            if (!string.IsNullOrWhiteSpace(context.LastDisasterTriggerMessage))
+            {
+                _builder.AppendLine($"- Last Trigger: {context.LastDisasterTriggerMessage}");
             }
         }
 

@@ -71,3 +71,17 @@
 - 验证通过：点击节点可进入对应场景；完成节点后推进到目标节点并扣除粮食；粮食为 0 时禁止继续前进并提示阻断原因。
 - 现状说明：进入节点后看到蓝色背景属于占位测试场景默认相机背景色，符合当前阶段预期；正式地图/HUD 回场流程不在第8步范围内。
 - 按约束执行：第9步（危机值与灾害事件挂钩）尚未开始。
+
+2026-04-27：完成实施计划第9步代码实现（危机值联动灾害事件）
+- 在 `Assets/Scripts/Core/GameContext.cs` 接入危机系统参数与状态：每次完成节点后按 `CrisisGainPerAdvance` 自动增长危机值；新增灾害触发阈值与步长（`DisasterTriggerThreshold` / `DisasterTriggerStep`）以及下一次触发阈值追踪。
+- 在 `Assets/Scripts/Core/GameContext.cs` 增加阈值检测与强制触发链路：`SetResource(ResourceType.Crisis, ...)` 时评估是否跨阈值；跨阈值后强制选择灾害事件并发布 `CrisisDisasterTriggeredEvent`。
+- 在 `Assets/Scripts/Data/ScriptableObjects/GameDataTypes.cs` 新增 `DisasterEventType` 枚举（`Plague` / `BanditRaid` / `NaturalDisaster`）；在 `Assets/Scripts/Data/ScriptableObjects/EventConfig.cs` 增加 `IsDisasterEvent` 与 `DisasterType`，支持策划标记灾害事件。
+- 在 `Assets/Scripts/Core/GameEventMessages.cs` 新增 `CrisisDisasterTriggeredEvent`（危机值、触发阈值、事件引用、灾害类型、是否 fallback），供调试层与后续事件执行层消费。
+- 在 `Assets/Scripts/Core/GameContextDebugPanel.cs` 新增危机系统可视化区（每步危机增长、阈值、下次触发阈值、待处理灾害、最近触发信息）。
+- 在 `Assets/Scripts/Core/GameContextStep6TestDriver.cs` 增加第9步手工验收入口：`V` 键将危机值快速设置到下一触发阈值，并输出 `CrisisDisasterTriggeredEvent` 日志。
+- 更新 `Assets/Data/TestStep4/EventConfig.asset`：将测试事件标记为灾害事件（`Plague`），确保第9步验收时可直接观察“灾害类型正确出现”。
+
+2026-04-27：第9步验证通过（由测试执行）
+- 验证通过：手动拉高危机值可触发强制灾害事件，且事件类型正确输出（满足实施计划第9步验收标准）。
+- 兼容性修正：为避免进入 Step8 节点场景后 Step6/Step7 测试入口丢失，已将 `GameContextStep6TestDriver` 与 `GameContextStep7TestDriver` 调整为 `DontDestroyOnLoad` 单例常驻；返回后按钮文字与热键恢复正常。
+- 约束执行：在你确认第9步验证通过前未开始第10步；当前已完成文档同步，后续可按指令再进入第10步。

@@ -163,4 +163,27 @@ namespace OneManJourney.Runtime
         public int CurrentNodeId { get; }
         public int FoodAmount { get; }
     }
+
+    public readonly struct CrisisDisasterTriggeredEvent
+    {
+        public CrisisDisasterTriggeredEvent(
+            int crisisValue,
+            int triggerThreshold,
+            EventConfig disasterEvent,
+            DisasterEventType disasterType,
+            bool usedFallbackEvent)
+        {
+            CrisisValue = crisisValue;
+            TriggerThreshold = triggerThreshold;
+            DisasterEvent = disasterEvent;
+            DisasterType = disasterType;
+            UsedFallbackEvent = usedFallbackEvent;
+        }
+
+        public int CrisisValue { get; }
+        public int TriggerThreshold { get; }
+        public EventConfig DisasterEvent { get; }
+        public DisasterEventType DisasterType { get; }
+        public bool UsedFallbackEvent { get; }
+    }
 }

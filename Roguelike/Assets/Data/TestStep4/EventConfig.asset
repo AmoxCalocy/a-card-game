@@ -15,6 +15,8 @@ MonoBehaviour:
   _id: event.id
   _displayName: New Event
   _description: 
+  _isDisasterEvent: 1
+  _disasterType: 1
   _options:
   - _optionId: 
     _title: 

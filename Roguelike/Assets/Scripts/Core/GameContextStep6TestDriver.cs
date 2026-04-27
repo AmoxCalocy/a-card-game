@@ -7,9 +7,12 @@ namespace OneManJourney.Runtime
     [DisallowMultipleComponent]
     public sealed class GameContextStep6TestDriver : MonoBehaviour
     {
+        private static GameContextStep6TestDriver _instance;
+
         [Header("Hotkeys")]
         [SerializeField] private KeyCode _resourceHotkey = KeyCode.R;
         [SerializeField] private KeyCode _crisisHotkey = KeyCode.C;
+        [SerializeField] private KeyCode _setCrisisToThresholdHotkey = KeyCode.V;
         [SerializeField] private KeyCode _advanceNodeHotkey = KeyCode.N;
         [SerializeField] private KeyCode _drawCardHotkey = KeyCode.D;
 
@@ -24,6 +27,19 @@ namespace OneManJourney.Runtime
         private IDisposable _nodeSelectedSubscription;
         private IDisposable _cardDrawnSubscription;
         private IDisposable _contextInitializedSubscription;
+        private IDisposable _crisisDisasterTriggeredSubscription;
+
+        private void Awake()
+        {
+            if (_instance != null && _instance != this)
+            {
+                Destroy(gameObject);
+                return;
+            }
+
+            _instance = this;
+            DontDestroyOnLoad(gameObject);
+        }
 
         private void OnEnable()
         {
@@ -50,6 +66,11 @@ namespace OneManJourney.Runtime
             if (Input.GetKeyDown(_crisisHotkey))
             {
                 _context.AddResource(ResourceType.Crisis, _crisisDelta);
+            }
+
+            if (Input.GetKeyDown(_setCrisisToThresholdHotkey))
+            {
+                _context.SetResource(ResourceType.Crisis, _context.NextDisasterTriggerThreshold);
             }
 
             if (Input.GetKeyDown(_advanceNodeHotkey))
@@ -104,6 +125,7 @@ namespace OneManJourney.Runtime
                 _nodeSelectedSubscription = _eventBus.Subscribe<NodeSelectedEvent>(OnNodeSelected);
                 _cardDrawnSubscription = _eventBus.Subscribe<CardDrawnEvent>(OnCardDrawn);
                 _contextInitializedSubscription = _eventBus.Subscribe<GameContextInitializedEvent>(OnContextInitialized);
+                _crisisDisasterTriggeredSubscription = _eventBus.Subscribe<CrisisDisasterTriggeredEvent>(OnCrisisDisasterTriggered);
             }
 
             return true;
@@ -115,13 +137,23 @@ namespace OneManJourney.Runtime
             _nodeSelectedSubscription?.Dispose();
             _cardDrawnSubscription?.Dispose();
             _contextInitializedSubscription?.Dispose();
+            _crisisDisasterTriggeredSubscription?.Dispose();
 
             _resourceChangedSubscription = null;
             _nodeSelectedSubscription = null;
             _cardDrawnSubscription = null;
             _contextInitializedSubscription = null;
+            _crisisDisasterTriggeredSubscription = null;
             _eventBus = null;
             _context = null;
+        }
+
+        private void OnDestroy()
+        {
+            if (_instance == this)
+            {
+                _instance = null;
+            }
         }
 
         private static void OnResourceChanged(ResourceChangedEvent evt)
@@ -145,6 +177,15 @@ namespace OneManJourney.Runtime
             Debug.Log($"Step6TestDriver Event: ContextInitialized chapter={evt.Chapter}, node={evt.NodeIndex}, visited={evt.NodesVisited}, crisis={evt.CrisisValue}, cards={evt.CardPoolCount}, events={evt.EventPoolCount}.");
         }
 
+        private static void OnCrisisDisasterTriggered(CrisisDisasterTriggeredEvent evt)
+        {
+            string eventName = evt.DisasterEvent == null ? "none" : evt.DisasterEvent.DisplayName;
+            string eventId = evt.DisasterEvent == null ? "n/a" : evt.DisasterEvent.Id;
+            Debug.LogWarning(
+                "Step6TestDriver Event: CrisisDisasterTriggered " +
+                $"threshold={evt.TriggerThreshold}, crisis={evt.CrisisValue}, type={evt.DisasterType}, event={eventName} ({eventId}), fallback={evt.UsedFallbackEvent}.");
+        }
+
         private void OnGUI()
         {
             if (!Application.isPlaying)
@@ -153,7 +194,7 @@ namespace OneManJourney.Runtime
             }
 
             const int width = 460;
-            const int height = 92;
+            const int height = 110;
             Rect rect = new Rect(Screen.width - width - 16, 16, width, height);
             GUI.Box(rect, string.Empty);
             GUI.Label(
@@ -161,6 +202,7 @@ namespace OneManJourney.Runtime
                 $"Step6 Test Driver\n" +
                 $"[{_resourceHotkey}] {_resourceType} {_resourceDelta:+#;-#;0}  " +
                 $"[{_crisisHotkey}] Crisis {_crisisDelta:+#;-#;0}  " +
+                $"[{_setCrisisToThresholdHotkey}] Crisis=>Threshold\n" +
                 $"[{_advanceNodeHotkey}] Advance Node  " +
                 $"[{_drawCardHotkey}] Draw Card");
         }
