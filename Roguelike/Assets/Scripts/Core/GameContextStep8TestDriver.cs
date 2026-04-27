@@ -21,6 +21,7 @@ namespace OneManJourney.Runtime
         private IDisposable _journeyNodeEnteredSubscription;
         private IDisposable _journeyNodeCompletedSubscription;
         private IDisposable _journeyAdvanceBlockedSubscription;
+        private IDisposable _battleEncounterPreparedSubscription;
 
         private void Awake()
         {
@@ -112,6 +113,7 @@ namespace OneManJourney.Runtime
                 _journeyNodeEnteredSubscription = _eventBus.Subscribe<JourneyNodeEnteredEvent>(HandleJourneyNodeEntered);
                 _journeyNodeCompletedSubscription = _eventBus.Subscribe<JourneyNodeCompletedEvent>(HandleJourneyNodeCompleted);
                 _journeyAdvanceBlockedSubscription = _eventBus.Subscribe<JourneyAdvanceBlockedEvent>(HandleJourneyAdvanceBlocked);
+                _battleEncounterPreparedSubscription = _eventBus.Subscribe<BattleEncounterPreparedEvent>(HandleBattleEncounterPrepared);
             }
 
             return true;
@@ -122,9 +124,11 @@ namespace OneManJourney.Runtime
             _journeyNodeEnteredSubscription?.Dispose();
             _journeyNodeCompletedSubscription?.Dispose();
             _journeyAdvanceBlockedSubscription?.Dispose();
+            _battleEncounterPreparedSubscription?.Dispose();
             _journeyNodeEnteredSubscription = null;
             _journeyNodeCompletedSubscription = null;
             _journeyAdvanceBlockedSubscription = null;
+            _battleEncounterPreparedSubscription = null;
             _eventBus = null;
             _context = null;
         }
@@ -156,6 +160,31 @@ namespace OneManJourney.Runtime
             Debug.LogWarning(
                 "Step8TestDriver Event: AdvanceBlocked " +
                 $"reason={evt.Reason}, node={evt.CurrentNodeId}, food={evt.FoodAmount}, message='{evt.Message}'.");
+        }
+
+        private static void HandleBattleEncounterPrepared(BattleEncounterPreparedEvent evt)
+        {
+            Debug.Log(
+                "Step8TestDriver Event: BattleEncounterPrepared " +
+                $"node={evt.NodeId}, type={evt.NodeType}, seed={evt.EncounterSeed}, enemyCount={evt.EnemyCount}, " +
+                $"queue=[{FormatEnemyQueue(evt.EnemyQueue)}].");
+        }
+
+        private static string FormatEnemyQueue(IReadOnlyList<EnemyConfig> queue)
+        {
+            if (queue == null || queue.Count == 0)
+            {
+                return "none";
+            }
+
+            string[] names = new string[queue.Count];
+            for (int i = 0; i < queue.Count; i++)
+            {
+                EnemyConfig enemy = queue[i];
+                names[i] = enemy == null ? "null" : $"{enemy.DisplayName} ({enemy.Id})";
+            }
+
+            return string.Join(", ", names);
         }
 
         private void OnGUI()

@@ -227,3 +227,52 @@
   - 危机值跨阈值后会发布 `CrisisDisasterTriggeredEvent`，灾害类型正确出现（示例：`Plague`）。
   - Step8 场景往返后 Step6/Step7 调试入口持续可用（常驻对象修正生效）。
   - 验证结论：第9步验收通过。
+
+## 战斗入口层（2026-04-27，实施计划第10步）
+- 目标：把“战斗节点”从纯场景路由升级为“节点配置驱动的战斗遭遇入口”，形成“进入 Battle/Boss 节点 -> 准备敌方队列 -> 载入战斗场景 -> 校验队列一致性”的可观测闭环。
+- 关键架构洞察：
+  - 战斗队列采用“地图生成后预配置 + 进入节点时激活”的双阶段模型，避免在场景切换瞬时随机生成造成不可复现。
+  - 遭遇随机性绑定 `map.Seed + nodeId + nodeType`，保证同一 Run 同一节点可重现，便于回放与定位问题。
+  - 一致性验证采用“运行时校验器 + 事件日志 + 调试面板”三路观测，降低只靠 UI 观察导致的误判。
+
+- 文件职责（第10步相关）：
+  - `Assets/Scripts/Core/GameContext.cs`
+    - 新增敌人池装载与注入：`_startingEnemyPool`、`_enemyPool`、`SetEnemyPool`。
+    - 新增战斗节点配置仓：`_battleNodeEncounterConfigs`，按地图节点预生成 `BattleEncounterConfig`。
+    - 在 `TryEnterNextJourneyNode` 中对 Battle/Boss 节点执行战斗配置存在性校验并激活 `ActiveBattleEncounterConfig`。
+    - 发布 `BattleEncounterPreparedEvent`，并在缺配置时发布阻断原因 `MissingBattleEncounterConfig`。
+  - `Assets/Scripts/Core/BattleEncounterConfig.cs`
+    - 新增战斗入口数据快照：承载节点ID、节点类型、遭遇seed、敌方队列，作为 `GameContext`、调试层、验证器共享契约。
+  - `Assets/Scripts/Core/GameEventMessages.cs`
+    - 新增 `BattleEncounterPreparedEvent` 消息体与 `JourneyAdvanceBlockReason.MissingBattleEncounterConfig`。
+  - `Assets/Scripts/Core/BattleSceneEntryVerifier.cs`
+    - 新增战斗场景入场校验器：监听 `sceneLoaded`，在战斗场景输出“节点配置队列 vs 当前激活队列”的一致性日志。
+  - `Assets/Scripts/Core/GameContextBootstrap.cs`
+    - 启动引导扩展：自动确保 `BattleSceneEntryVerifier` 随 `GameContext` 注入，避免手工挂载遗漏。
+  - `Assets/Scripts/Core/GameContextDebugPanel.cs`
+    - 新增战斗入口摘要区：展示敌人池规模、节点配置队列、激活队列与 `Queue Matches Node Config` 结果。
+  - `Assets/Scripts/Core/GameContextStep8TestDriver.cs`
+    - 接入 `BattleEncounterPreparedEvent` 日志输出，补齐第8步节点交互到第10步战斗入口的桥接观测。
+  - `ProjectSettings/EditorBuildSettings.asset`
+    - 将 `BattleScene`、`EventScene`、`SupplyScene`、`BossScene` 加入 Build Settings，保证节点路由可真实切场景验证。
+
+- 生命周期与数据流（第10步）：
+  - 地图生成阶段：`GameContext.BuildJourneyMap` 后执行 `BuildBattleNodeEncounterConfigs`，为每个 Battle/Boss 节点生成固定敌方队列。
+  - 节点进入阶段：`TryEnterNextJourneyNode` 在 Battle/Boss 路径调用 `TryPrepareBattleEncounter`，激活对应配置并发布 `BattleEncounterPreparedEvent`。
+  - 场景加载阶段：`JourneyNodeSceneRouter` 执行场景切换；`BattleSceneEntryVerifier` 在场景加载回调中比对节点配置与激活队列并输出一致性结果。
+  - 调试观测阶段：`GameContextDebugPanel` 与 Step8 驱动同步刷新，确保场景前后都能看到同一份敌方队列状态。
+
+- 边界与后续：
+  - 本层仅实现“战斗入口配置与加载前校验”，不包含第11步回合系统（能量、抽弃牌、行动顺序）和第12步卡牌效果执行。
+  - 当前敌方队列为节点入口级别配置，不含战斗中 AI 行动序列与动态增援逻辑（后续步骤扩展）。
+
+## 第10步验证状态（2026-04-27）
+- 验证环境：Unity 2022.3.62f2c1，`Assets/Scenes/SampleScene.unity` -> `Assets/Scenes/BattleScene.unity`。
+- 验证方法：
+  - 在旅途中选择 Battle/Boss 节点，触发 `BattleEncounterPreparedEvent`，确认敌方队列已在进入前生成。
+  - 自动切入 `BattleScene` 后观察 `Step10Verifier` 日志中 `nodeConfig` 与 `activeQueue` 对比结果。
+  - 对照调试面板 `Battle Entry` 区块，确认 `Queue Matches Node Config` 为 `True`。
+- 验证结果：
+  - 进入战斗时可稳定输出队列一致性日志，`match=True`。
+  - 节点配置队列与激活队列一致，满足“进入战斗时敌人列表与节点配置一致”的验收标准。
+  - 验证结论：第10步验收通过。

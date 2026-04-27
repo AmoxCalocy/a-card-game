@@ -8,5 +8,17 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/SampleScene.unity
     guid: d283240d8c361a640bb4a48ca733f870
+  - enabled: 1
+    path: Assets/Scenes/BattleScene.unity
+    guid: 115508b08c3d7504b89401acd2f95c62
+  - enabled: 1
+    path: Assets/Scenes/EventScene.unity
+    guid: 3eda089c1d8435f43af9e19f7130795e
+  - enabled: 1
+    path: Assets/Scenes/SupplyScene.unity
+    guid: efc2c8fdadf434b4eadd7762c0782290
+  - enabled: 1
+    path: Assets/Scenes/BossScene.unity
+    guid: ffbc63ef0baaa4d4eba9d11f4af5f631
   m_configObjects:
     com.unity.addressableassets: {fileID: 11400000, guid: 8b203580b6a0edb41a0b0b715cdb1c5d, type: 2}

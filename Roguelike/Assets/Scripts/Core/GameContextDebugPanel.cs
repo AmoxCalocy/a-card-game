@@ -23,6 +23,7 @@ namespace OneManJourney.Runtime
         private IDisposable _journeyNodeCompletedSubscription;
         private IDisposable _journeyAdvanceBlockedSubscription;
         private IDisposable _crisisDisasterTriggeredSubscription;
+        private IDisposable _battleEncounterPreparedSubscription;
         private TextMeshProUGUI _text;
 
         private void Awake()
@@ -148,6 +149,7 @@ namespace OneManJourney.Runtime
             _journeyNodeCompletedSubscription = _eventBus.Subscribe<JourneyNodeCompletedEvent>(HandleJourneyNodeCompleted);
             _journeyAdvanceBlockedSubscription = _eventBus.Subscribe<JourneyAdvanceBlockedEvent>(HandleJourneyAdvanceBlocked);
             _crisisDisasterTriggeredSubscription = _eventBus.Subscribe<CrisisDisasterTriggeredEvent>(HandleCrisisDisasterTriggered);
+            _battleEncounterPreparedSubscription = _eventBus.Subscribe<BattleEncounterPreparedEvent>(HandleBattleEncounterPrepared);
             return true;
         }
 
@@ -162,6 +164,7 @@ namespace OneManJourney.Runtime
             _journeyNodeCompletedSubscription?.Dispose();
             _journeyAdvanceBlockedSubscription?.Dispose();
             _crisisDisasterTriggeredSubscription?.Dispose();
+            _battleEncounterPreparedSubscription?.Dispose();
 
             _resourceChangedSubscription = null;
             _nodeSelectedSubscription = null;
@@ -172,6 +175,7 @@ namespace OneManJourney.Runtime
             _journeyNodeCompletedSubscription = null;
             _journeyAdvanceBlockedSubscription = null;
             _crisisDisasterTriggeredSubscription = null;
+            _battleEncounterPreparedSubscription = null;
             _eventBus = null;
         }
 
@@ -216,6 +220,11 @@ namespace OneManJourney.Runtime
         }
 
         private void HandleCrisisDisasterTriggered(CrisisDisasterTriggeredEvent _)
+        {
+            Refresh();
+        }
+
+        private void HandleBattleEncounterPrepared(BattleEncounterPreparedEvent _)
         {
             Refresh();
         }
@@ -309,9 +318,11 @@ namespace OneManJourney.Runtime
             _builder.AppendLine($"Crisis: {state.CrisisValue}");
             _builder.AppendLine($"Card Pool: {_context.CardPool.Count}");
             _builder.AppendLine($"Event Pool: {_context.EventPool.Count}");
+            _builder.AppendLine($"Enemy Pool: {_context.EnemyPool.Count}");
             AppendCrisisSummary(_context);
             AppendJourneyMapSummary(_context.JourneyMap);
             AppendJourneyProgressSummary(_context);
+            AppendBattleEntrySummary(_context);
             _builder.AppendLine();
             _builder.AppendLine("Resources:");
 
@@ -409,6 +420,99 @@ namespace OneManJourney.Runtime
             {
                 _builder.AppendLine($"- Last Trigger: {context.LastDisasterTriggerMessage}");
             }
+        }
+
+        private void AppendBattleEntrySummary(GameContext context)
+        {
+            _builder.AppendLine();
+            _builder.AppendLine("Battle Entry:");
+
+            if (!context.HasActiveJourneyEncounter)
+            {
+                _builder.AppendLine("- Active Encounter: None");
+                return;
+            }
+
+            if (context.ActiveJourneyNodeType != JourneyNodeType.Battle
+                && context.ActiveJourneyNodeType != JourneyNodeType.Boss)
+            {
+                _builder.AppendLine("- Active Encounter: Non-battle node");
+                return;
+            }
+
+            _builder.AppendLine($"- Active Node: {context.ActiveJourneyNodeId} ({context.ActiveJourneyNodeType})");
+
+            if (context.TryGetBattleNodeEncounterConfig(context.ActiveJourneyNodeId, out BattleEncounterConfig nodeConfig))
+            {
+                _builder.AppendLine($"- Node Config Seed: {nodeConfig.EncounterSeed}");
+                _builder.AppendLine($"- Node Config Queue: {FormatEnemyQueue(nodeConfig.EnemyQueue)}");
+            }
+            else
+            {
+                _builder.AppendLine("- Node Config: Missing");
+            }
+
+            if (context.ActiveBattleEncounterConfig == null)
+            {
+                _builder.AppendLine("- Active Queue: Missing");
+                return;
+            }
+
+            BattleEncounterConfig activeConfig = context.ActiveBattleEncounterConfig;
+            _builder.AppendLine($"- Active Queue Seed: {activeConfig.EncounterSeed}");
+            _builder.AppendLine($"- Active Queue: {FormatEnemyQueue(activeConfig.EnemyQueue)}");
+            bool matches = context.TryGetBattleNodeEncounterConfig(activeConfig.NodeId, out BattleEncounterConfig expected)
+                && HasSameEnemyQueue(expected.EnemyQueue, activeConfig.EnemyQueue);
+            _builder.AppendLine($"- Queue Matches Node Config: {matches}");
+        }
+
+        private static string FormatEnemyQueue(IReadOnlyList<EnemyConfig> queue)
+        {
+            if (queue == null || queue.Count == 0)
+            {
+                return "none";
+            }
+
+            var builder = new StringBuilder();
+            for (int index = 0; index < queue.Count; index++)
+            {
+                if (index > 0)
+                {
+                    builder.Append(", ");
+                }
+
+                EnemyConfig enemy = queue[index];
+                if (enemy == null)
+                {
+                    builder.Append("null");
+                    continue;
+                }
+
+                builder.Append(enemy.DisplayName);
+                builder.Append(" (");
+                builder.Append(enemy.Id);
+                builder.Append(')');
+            }
+
+            return builder.ToString();
+        }
+
+        private static bool HasSameEnemyQueue(IReadOnlyList<EnemyConfig> left, IReadOnlyList<EnemyConfig> right)
+        {
+            if (left == null || right == null || left.Count != right.Count)
+            {
+                return false;
+            }
+
+            for (int index = 0; index < left.Count; index++)
+            {
+                if (left[index] != right[index])
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private void AppendJourneyMapSummary(JourneyMap journeyMap)

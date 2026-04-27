@@ -15,9 +15,19 @@ namespace OneManJourney.Runtime
         [SerializeField] private ResourceTableConfig _resourceTable;
         [SerializeField] private List<CardConfig> _startingCardPool = new List<CardConfig>();
         [SerializeField] private List<EventConfig> _startingEventPool = new List<EventConfig>();
+        [SerializeField] private List<EnemyConfig> _startingEnemyPool = new List<EnemyConfig>();
         [SerializeField] private bool _autoLoadEditorData = true;
         [Header("Journey Map")]
         [SerializeField] private JourneyMapGenerationConfig _journeyMapGenerationConfig = new JourneyMapGenerationConfig();
+        [Header("Battle Entry")]
+        [Min(1)]
+        [SerializeField] private int _battleEnemyCountMin = 1;
+        [Min(1)]
+        [SerializeField] private int _battleEnemyCountMax = 3;
+        [Min(1)]
+        [SerializeField] private int _bossEnemyCountMin = 2;
+        [Min(1)]
+        [SerializeField] private int _bossEnemyCountMax = 4;
         [Header("Journey Progress")]
         [Min(1)]
         [SerializeField] private int _foodCostPerAdvance = 1;
@@ -36,6 +46,8 @@ namespace OneManJourney.Runtime
         private readonly Dictionary<ResourceType, int> _resources = new Dictionary<ResourceType, int>();
         private readonly List<CardConfig> _cardPool = new List<CardConfig>();
         private readonly List<EventConfig> _eventPool = new List<EventConfig>();
+        private readonly List<EnemyConfig> _enemyPool = new List<EnemyConfig>();
+        private readonly Dictionary<int, BattleEncounterConfig> _battleNodeEncounterConfigs = new Dictionary<int, BattleEncounterConfig>();
         private GameEventBus _eventBus;
         private JourneyMap _journeyMap;
         private bool _isInitialized;
@@ -47,6 +59,7 @@ namespace OneManJourney.Runtime
         private DisasterEventType _pendingDisasterType = DisasterEventType.None;
         private string _lastDisasterTriggerMessage = string.Empty;
         private int _nextDisasterTriggerThreshold;
+        private BattleEncounterConfig _activeBattleEncounterConfig;
 
         public static GameContext Instance { get; private set; }
 
@@ -57,6 +70,7 @@ namespace OneManJourney.Runtime
         public IReadOnlyDictionary<ResourceType, int> Resources => _resources;
         public IReadOnlyList<CardConfig> CardPool => _cardPool;
         public IReadOnlyList<EventConfig> EventPool => _eventPool;
+        public IReadOnlyList<EnemyConfig> EnemyPool => _enemyPool;
         public GameEventBus EventBus => _eventBus;
         public JourneyMap JourneyMap => _journeyMap;
         public int FoodCostPerAdvance => Mathf.Max(1, _foodCostPerAdvance);
@@ -72,6 +86,7 @@ namespace OneManJourney.Runtime
         public EventConfig PendingDisasterEvent => _pendingDisasterEvent;
         public DisasterEventType PendingDisasterType => _pendingDisasterType;
         public string LastDisasterTriggerMessage => _lastDisasterTriggerMessage;
+        public BattleEncounterConfig ActiveBattleEncounterConfig => _activeBattleEncounterConfig;
         // Avoid Unity API calls during MonoBehaviour construction/field initialization.
         public JourneyState JourneyState { get; private set; } = new JourneyState();
 
@@ -229,6 +244,11 @@ namespace OneManJourney.Runtime
             return TryGetJourneyNode(JourneyState.NodeIndex, out node);
         }
 
+        public bool TryGetBattleNodeEncounterConfig(int nodeId, out BattleEncounterConfig encounterConfig)
+        {
+            return _battleNodeEncounterConfigs.TryGetValue(nodeId, out encounterConfig);
+        }
+
         public IReadOnlyList<JourneyMapNode> GetAvailableNextJourneyNodes()
         {
             var nextNodes = new List<JourneyMapNode>();
@@ -308,6 +328,18 @@ namespace OneManJourney.Runtime
                     JourneyAdvanceBlockReason.MissingTargetNode,
                     $"Target node {targetNodeId} does not exist.",
                     out blockMessage);
+            }
+
+            if (targetNode.NodeType == JourneyNodeType.Battle || targetNode.NodeType == JourneyNodeType.Boss)
+            {
+                if (!TryPrepareBattleEncounter(targetNode, out blockMessage))
+                {
+                    return false;
+                }
+            }
+            else
+            {
+                _activeBattleEncounterConfig = null;
             }
 
             _activeJourneyNodeId = targetNode.Id;
@@ -407,6 +439,14 @@ namespace OneManJourney.Runtime
             NotifyStateChanged();
         }
 
+        public void SetEnemyPool(IEnumerable<EnemyConfig> enemies)
+        {
+            _enemyPool.Clear();
+            AddUniqueConfigs(_enemyPool, enemies);
+            BuildBattleNodeEncounterConfigs();
+            NotifyStateChanged();
+        }
+
         public void RegenerateJourneyMap()
         {
             RegenerateJourneyMap(UnityEngine.Random.Range(int.MinValue, int.MaxValue));
@@ -453,9 +493,11 @@ namespace OneManJourney.Runtime
         {
             _cardPool.Clear();
             _eventPool.Clear();
+            _enemyPool.Clear();
 
             AddUniqueConfigs(_cardPool, _startingCardPool);
             AddUniqueConfigs(_eventPool, _startingEventPool);
+            AddUniqueConfigs(_enemyPool, _startingEnemyPool);
         }
 
         private static void AddUniqueConfigs<T>(List<T> target, IEnumerable<T> source) where T : class
@@ -489,6 +531,7 @@ namespace OneManJourney.Runtime
         private void BuildJourneyMap(int seed)
         {
             _journeyMap = JourneyMapGenerator.Generate(seed, _journeyMapGenerationConfig);
+            BuildBattleNodeEncounterConfigs();
         }
 
         private string ResolveJourneySceneName(JourneyNodeType nodeType)
@@ -501,6 +544,79 @@ namespace OneManJourney.Runtime
                 JourneyNodeType.Boss => _bossSceneName,
                 _ => string.Empty
             };
+        }
+
+        private bool TryPrepareBattleEncounter(JourneyMapNode targetNode, out string blockMessage)
+        {
+            if (!_battleNodeEncounterConfigs.TryGetValue(targetNode.Id, out BattleEncounterConfig encounterConfig))
+            {
+                return BlockJourneyAdvance(
+                    JourneyAdvanceBlockReason.MissingBattleEncounterConfig,
+                    $"Battle encounter config is missing for node {targetNode.Id}.",
+                    out blockMessage);
+            }
+
+            _activeBattleEncounterConfig = encounterConfig;
+            Publish(new BattleEncounterPreparedEvent(
+                encounterConfig.NodeId,
+                encounterConfig.NodeType,
+                encounterConfig.EncounterSeed,
+                encounterConfig.EnemyQueue));
+            blockMessage = string.Empty;
+            return true;
+        }
+
+        private void BuildBattleNodeEncounterConfigs()
+        {
+            _battleNodeEncounterConfigs.Clear();
+
+            if (_journeyMap == null || _enemyPool.Count == 0)
+            {
+                return;
+            }
+
+            int runSeed = _journeyMap.Seed;
+            for (int i = 0; i < _journeyMap.Nodes.Count; i++)
+            {
+                JourneyMapNode node = _journeyMap.Nodes[i];
+                if (node.NodeType != JourneyNodeType.Battle && node.NodeType != JourneyNodeType.Boss)
+                {
+                    continue;
+                }
+
+                int encounterSeed = ComputeBattleEncounterSeed(runSeed, node.Id, node.NodeType);
+                var random = new System.Random(encounterSeed);
+                int enemyCount = RollBattleEnemyCount(random, node.NodeType);
+                var queue = new List<EnemyConfig>(enemyCount);
+                for (int index = 0; index < enemyCount; index++)
+                {
+                    queue.Add(_enemyPool[random.Next(0, _enemyPool.Count)]);
+                }
+
+                _battleNodeEncounterConfigs[node.Id] = new BattleEncounterConfig(
+                    node.Id,
+                    node.NodeType,
+                    encounterSeed,
+                    queue);
+            }
+        }
+
+        private int RollBattleEnemyCount(System.Random random, JourneyNodeType nodeType)
+        {
+            int minCount = nodeType == JourneyNodeType.Boss ? Mathf.Max(1, _bossEnemyCountMin) : Mathf.Max(1, _battleEnemyCountMin);
+            int maxCount = nodeType == JourneyNodeType.Boss ? Mathf.Max(minCount, _bossEnemyCountMax) : Mathf.Max(minCount, _battleEnemyCountMax);
+            return random.Next(minCount, maxCount + 1);
+        }
+
+        private static int ComputeBattleEncounterSeed(int runSeed, int nodeId, JourneyNodeType nodeType)
+        {
+            unchecked
+            {
+                int hash = runSeed;
+                hash = (hash * 397) ^ nodeId;
+                hash = (hash * 397) ^ (int)nodeType;
+                return hash;
+            }
         }
 
         private bool BlockJourneyAdvance(JourneyAdvanceBlockReason reason, string message, out string blockMessage)
@@ -521,6 +637,7 @@ namespace OneManJourney.Runtime
             _activeJourneyNodeId = -1;
             _activeJourneyNodeType = JourneyNodeType.Battle;
             _activeJourneySceneName = string.Empty;
+            _activeBattleEncounterConfig = null;
         }
 
         private void ClearJourneyAdvanceBlockMessage()
@@ -696,6 +813,7 @@ namespace OneManJourney.Runtime
         {
             _startingCardPool.RemoveAll(card => card == null);
             _startingEventPool.RemoveAll(gameEvent => gameEvent == null);
+            _startingEnemyPool.RemoveAll(enemy => enemy == null);
 
 #if UNITY_EDITOR
             if (!_autoLoadEditorData)
@@ -716,6 +834,11 @@ namespace OneManJourney.Runtime
             if (_startingEventPool.Count == 0)
             {
                 _startingEventPool = LoadAssets<EventConfig>();
+            }
+
+            if (_startingEnemyPool.Count == 0)
+            {
+                _startingEnemyPool = LoadAssets<EnemyConfig>();
             }
 #endif
         }

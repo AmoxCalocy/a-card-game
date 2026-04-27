@@ -85,3 +85,18 @@
 - 验证通过：手动拉高危机值可触发强制灾害事件，且事件类型正确输出（满足实施计划第9步验收标准）。
 - 兼容性修正：为避免进入 Step8 节点场景后 Step6/Step7 测试入口丢失，已将 `GameContextStep6TestDriver` 与 `GameContextStep7TestDriver` 调整为 `DontDestroyOnLoad` 单例常驻；返回后按钮文字与热键恢复正常。
 - 约束执行：在你确认第9步验证通过前未开始第10步；当前已完成文档同步，后续可按指令再进入第10步。
+
+2026-04-27：完成实施计划第10步代码实现（战斗入口）
+- 在 `Assets/Scripts/Core/GameContext.cs` 新增敌人池接入（`_startingEnemyPool` / `SetEnemyPool`）与战斗节点配置生成器：基于地图 seed + nodeId 生成可复现的 `BattleEncounterConfig`，覆盖 Battle/Boss 节点。
+- 在 `Assets/Scripts/Core/GameContext.cs` 的 `TryEnterNextJourneyNode` 接入战斗入口校验：进入 Battle/Boss 节点前必须存在对应战斗配置；成功时激活 `ActiveBattleEncounterConfig`，失败时发布阻断原因 `MissingBattleEncounterConfig`。
+- 新增 `Assets/Scripts/Core/BattleEncounterConfig.cs`，统一承载“节点ID、节点类型、遭遇seed、敌方队列”运行时快照，避免 UI/验证器直接依赖 `GameContext` 内部字典结构。
+- 在 `Assets/Scripts/Core/GameEventMessages.cs` 新增 `BattleEncounterPreparedEvent`，用于广播“战斗节点已准备好敌方队列”；并扩展 `JourneyAdvanceBlockReason`。
+- 在 `Assets/Scripts/Core/GameContextDebugPanel.cs` 新增战斗入口观测区：展示敌人池规模、节点配置队列、当前激活队列及一致性结果（`Queue Matches Node Config`）。
+- 新增 `Assets/Scripts/Core/BattleSceneEntryVerifier.cs` 并在 `Assets/Scripts/Core/GameContextBootstrap.cs` 自动注入：战斗场景加载后输出“nodeConfig vs activeQueue”一致性日志，作为第10步验收主日志。
+- 更新 `Assets/Scripts/Core/GameContextStep8TestDriver.cs`：订阅并输出 `BattleEncounterPreparedEvent`，便于在旅途面板直接确认节点进入时的敌方队列。
+- 更新 `ProjectSettings/EditorBuildSettings.asset`：补齐 `BattleScene` / `EventScene` / `SupplyScene` / `BossScene` 到 Build Settings，确保第8/10步场景切换链路完整。
+
+2026-04-27：第10步验证通过（由测试执行）
+- 验证通过：从战斗节点进入 `BattleScene` 时，敌方队列与节点配置一致（`Step10Verifier` 日志 `match=True`），满足“进入战斗时敌人列表与节点配置一致”的实施计划第10步验收标准。
+- 验证过程配套日志：`Step8TestDriver Event: BattleEncounterPrepared ... queue=[...]` 与 `Step10Verifier: Battle entry loaded ... nodeConfig=[...], activeQueue=[...], match=True`。
+- 约束执行：在你确认第10步验证通过前未开始第11步；当前仅完成第10步与文档同步。

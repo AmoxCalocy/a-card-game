@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using OneManJourney.Data;
 
 namespace OneManJourney.Runtime
@@ -108,10 +109,29 @@ namespace OneManJourney.Runtime
         MissingMap,
         MissingCurrentNode,
         MissingTargetNode,
+        MissingBattleEncounterConfig,
         InvalidPath,
         EncounterAlreadyActive,
         EncounterNotActive,
         InsufficientFood
+    }
+
+    public readonly struct BattleEncounterPreparedEvent
+    {
+        public BattleEncounterPreparedEvent(int nodeId, JourneyNodeType nodeType, int encounterSeed, IReadOnlyList<EnemyConfig> enemyQueue)
+        {
+            NodeId = nodeId;
+            NodeType = nodeType;
+            EncounterSeed = encounterSeed;
+            EnemyQueue = enemyQueue;
+            EnemyCount = enemyQueue?.Count ?? 0;
+        }
+
+        public int NodeId { get; }
+        public JourneyNodeType NodeType { get; }
+        public int EncounterSeed { get; }
+        public IReadOnlyList<EnemyConfig> EnemyQueue { get; }
+        public int EnemyCount { get; }
     }
 
     public readonly struct JourneyNodeEnteredEvent
