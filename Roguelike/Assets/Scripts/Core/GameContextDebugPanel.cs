@@ -13,6 +13,7 @@ namespace OneManJourney.Runtime
     {
         private readonly StringBuilder _builder = new StringBuilder(512);
         private GameContext _context;
+        private BattleTurnController _battleTurnController;
         private GameEventBus _eventBus;
         private IDisposable _resourceChangedSubscription;
         private IDisposable _nodeSelectedSubscription;
@@ -24,6 +25,13 @@ namespace OneManJourney.Runtime
         private IDisposable _journeyAdvanceBlockedSubscription;
         private IDisposable _crisisDisasterTriggeredSubscription;
         private IDisposable _battleEncounterPreparedSubscription;
+        private IDisposable _battleFlowInitializedSubscription;
+        private IDisposable _battleTurnStartedSubscription;
+        private IDisposable _battleCardPlayedSubscription;
+        private IDisposable _battleHandDiscardedSubscription;
+        private IDisposable _battleEnemyTurnResolvedSubscription;
+        private IDisposable _battleCardsDrawnSubscription;
+        private IDisposable _battleFlowEndedSubscription;
         private TextMeshProUGUI _text;
 
         private void Awake()
@@ -48,6 +56,11 @@ namespace OneManJourney.Runtime
         {
             bool didBind = false;
             if (_context == null && TryBindContext())
+            {
+                didBind = true;
+            }
+
+            if (_battleTurnController == null && TryBindBattleTurnController())
             {
                 didBind = true;
             }
@@ -94,6 +107,7 @@ namespace OneManJourney.Runtime
 
             _context.Initialized += HandleContextStateChanged;
             _context.StateChanged += HandleContextStateChanged;
+            TryBindBattleTurnController();
             TryBindEventBus();
             return true;
         }
@@ -107,12 +121,40 @@ namespace OneManJourney.Runtime
                 _context = null;
             }
 
+            _battleTurnController = null;
+
             UnbindEventBus();
         }
 
         private void HandleContextStateChanged()
         {
             Refresh();
+        }
+
+        private bool TryBindBattleTurnController()
+        {
+            BattleTurnController nextController = null;
+            if (_context != null)
+            {
+                nextController = _context.GetComponent<BattleTurnController>();
+            }
+
+            if (nextController == null && GameServices.TryResolve(out BattleTurnController resolved))
+            {
+                nextController = resolved;
+            }
+
+            if (nextController == null)
+            {
+                BattleTurnController[] controllers = Resources.FindObjectsOfTypeAll<BattleTurnController>();
+                if (controllers != null && controllers.Length > 0)
+                {
+                    nextController = controllers[0];
+                }
+            }
+
+            _battleTurnController = nextController;
+            return _battleTurnController != null;
         }
 
         private bool TryBindEventBus()
@@ -150,6 +192,13 @@ namespace OneManJourney.Runtime
             _journeyAdvanceBlockedSubscription = _eventBus.Subscribe<JourneyAdvanceBlockedEvent>(HandleJourneyAdvanceBlocked);
             _crisisDisasterTriggeredSubscription = _eventBus.Subscribe<CrisisDisasterTriggeredEvent>(HandleCrisisDisasterTriggered);
             _battleEncounterPreparedSubscription = _eventBus.Subscribe<BattleEncounterPreparedEvent>(HandleBattleEncounterPrepared);
+            _battleFlowInitializedSubscription = _eventBus.Subscribe<BattleFlowInitializedEvent>(HandleBattleFlowInitialized);
+            _battleTurnStartedSubscription = _eventBus.Subscribe<BattleTurnStartedEvent>(HandleBattleTurnStarted);
+            _battleCardPlayedSubscription = _eventBus.Subscribe<BattleCardPlayedEvent>(HandleBattleCardPlayed);
+            _battleHandDiscardedSubscription = _eventBus.Subscribe<BattleHandDiscardedEvent>(HandleBattleHandDiscarded);
+            _battleEnemyTurnResolvedSubscription = _eventBus.Subscribe<BattleEnemyTurnResolvedEvent>(HandleBattleEnemyTurnResolved);
+            _battleCardsDrawnSubscription = _eventBus.Subscribe<BattleCardsDrawnEvent>(HandleBattleCardsDrawn);
+            _battleFlowEndedSubscription = _eventBus.Subscribe<BattleFlowEndedEvent>(HandleBattleFlowEnded);
             return true;
         }
 
@@ -165,6 +214,13 @@ namespace OneManJourney.Runtime
             _journeyAdvanceBlockedSubscription?.Dispose();
             _crisisDisasterTriggeredSubscription?.Dispose();
             _battleEncounterPreparedSubscription?.Dispose();
+            _battleFlowInitializedSubscription?.Dispose();
+            _battleTurnStartedSubscription?.Dispose();
+            _battleCardPlayedSubscription?.Dispose();
+            _battleHandDiscardedSubscription?.Dispose();
+            _battleEnemyTurnResolvedSubscription?.Dispose();
+            _battleCardsDrawnSubscription?.Dispose();
+            _battleFlowEndedSubscription?.Dispose();
 
             _resourceChangedSubscription = null;
             _nodeSelectedSubscription = null;
@@ -176,6 +232,13 @@ namespace OneManJourney.Runtime
             _journeyAdvanceBlockedSubscription = null;
             _crisisDisasterTriggeredSubscription = null;
             _battleEncounterPreparedSubscription = null;
+            _battleFlowInitializedSubscription = null;
+            _battleTurnStartedSubscription = null;
+            _battleCardPlayedSubscription = null;
+            _battleHandDiscardedSubscription = null;
+            _battleEnemyTurnResolvedSubscription = null;
+            _battleCardsDrawnSubscription = null;
+            _battleFlowEndedSubscription = null;
             _eventBus = null;
         }
 
@@ -225,6 +288,41 @@ namespace OneManJourney.Runtime
         }
 
         private void HandleBattleEncounterPrepared(BattleEncounterPreparedEvent _)
+        {
+            Refresh();
+        }
+
+        private void HandleBattleFlowInitialized(BattleFlowInitializedEvent _)
+        {
+            Refresh();
+        }
+
+        private void HandleBattleTurnStarted(BattleTurnStartedEvent _)
+        {
+            Refresh();
+        }
+
+        private void HandleBattleCardPlayed(BattleCardPlayedEvent _)
+        {
+            Refresh();
+        }
+
+        private void HandleBattleHandDiscarded(BattleHandDiscardedEvent _)
+        {
+            Refresh();
+        }
+
+        private void HandleBattleEnemyTurnResolved(BattleEnemyTurnResolvedEvent _)
+        {
+            Refresh();
+        }
+
+        private void HandleBattleCardsDrawn(BattleCardsDrawnEvent _)
+        {
+            Refresh();
+        }
+
+        private void HandleBattleFlowEnded(BattleFlowEndedEvent _)
         {
             Refresh();
         }
@@ -310,6 +408,11 @@ namespace OneManJourney.Runtime
                 return;
             }
 
+            if (_battleTurnController == null)
+            {
+                TryBindBattleTurnController();
+            }
+
             JourneyState state = _context.JourneyState;
             _builder.AppendLine($"Chapter: {state.Chapter}");
             _builder.AppendLine($"Node Index: {state.NodeIndex}");
@@ -323,6 +426,7 @@ namespace OneManJourney.Runtime
             AppendJourneyMapSummary(_context.JourneyMap);
             AppendJourneyProgressSummary(_context);
             AppendBattleEntrySummary(_context);
+            AppendBattleTurnSummary();
             _builder.AppendLine();
             _builder.AppendLine("Resources:");
 
@@ -395,6 +499,51 @@ namespace OneManJourney.Runtime
             {
                 JourneyMapNode node = nextNodes[i];
                 _builder.AppendLine($"  - #{node.Id} ({node.NodeType})");
+            }
+        }
+
+        private void AppendBattleTurnSummary()
+        {
+            _builder.AppendLine();
+            _builder.AppendLine("Battle Turn:");
+
+            if (_battleTurnController == null)
+            {
+                _builder.AppendLine("- Controller: not found");
+                return;
+            }
+
+            if (!_battleTurnController.IsActive)
+            {
+                _builder.AppendLine("- Active: No");
+                return;
+            }
+
+            _builder.AppendLine($"- Active: Yes (Node {_battleTurnController.ActiveNodeId}, {_battleTurnController.ActiveNodeType})");
+            _builder.AppendLine($"- Phase: {_battleTurnController.Phase}");
+            _builder.AppendLine($"- Turn: {_battleTurnController.TurnNumber}");
+            _builder.AppendLine($"- Energy: {_battleTurnController.CurrentEnergy}/{_battleTurnController.MaxEnergyPerTurn}");
+            _builder.AppendLine($"- Enemy Count: {_battleTurnController.EnemyQueue.Count}");
+            _builder.AppendLine($"- Draw/Hand/Discard/Exhaust: {_battleTurnController.DrawPile.Count}/{_battleTurnController.Hand.Count}/{_battleTurnController.DiscardPile.Count}/{_battleTurnController.ExhaustPile.Count}");
+
+            if (_battleTurnController.Hand.Count == 0)
+            {
+                _builder.AppendLine("- Hand: empty");
+                return;
+            }
+
+            _builder.AppendLine("- Hand (first 5):");
+            int limit = Mathf.Min(5, _battleTurnController.Hand.Count);
+            for (int index = 0; index < limit; index++)
+            {
+                CardConfig card = _battleTurnController.Hand[index];
+                if (card == null)
+                {
+                    _builder.AppendLine("  - null");
+                    continue;
+                }
+
+                _builder.AppendLine($"  - {card.DisplayName} ({card.EnergyCost})");
             }
         }
 

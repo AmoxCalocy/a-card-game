@@ -15,13 +15,22 @@ namespace OneManJourney.Runtime
         [SerializeField] private KeyCode _selectSecondNodeHotkey = KeyCode.Alpha2;
         [SerializeField] private KeyCode _completeNodeHotkey = KeyCode.Return;
         [SerializeField] private KeyCode _depleteFoodHotkey = KeyCode.F;
+        [SerializeField] private KeyCode _playCardHotkey = KeyCode.P;
+        [SerializeField] private KeyCode _endTurnHotkey = KeyCode.E;
 
         private GameContext _context;
+        private BattleTurnController _battleTurnController;
         private GameEventBus _eventBus;
         private IDisposable _journeyNodeEnteredSubscription;
         private IDisposable _journeyNodeCompletedSubscription;
         private IDisposable _journeyAdvanceBlockedSubscription;
         private IDisposable _battleEncounterPreparedSubscription;
+        private IDisposable _battleFlowInitializedSubscription;
+        private IDisposable _battleTurnStartedSubscription;
+        private IDisposable _battleCardPlayedSubscription;
+        private IDisposable _battleHandDiscardedSubscription;
+        private IDisposable _battleEnemyTurnResolvedSubscription;
+        private IDisposable _battleCardsDrawnSubscription;
 
         private void Awake()
         {
@@ -55,6 +64,19 @@ namespace OneManJourney.Runtime
             if (Input.GetKeyDown(_depleteFoodHotkey))
             {
                 _context.SetResource(ResourceType.Food, 0);
+            }
+
+            if (_battleTurnController != null && _battleTurnController.IsActive)
+            {
+                if (Input.GetKeyDown(_playCardHotkey) && !_battleTurnController.TryPlayFirstCard(out string playMessage))
+                {
+                    Debug.LogWarning($"Step11TestDriver Action: play failed. {playMessage}");
+                }
+
+                if (Input.GetKeyDown(_endTurnHotkey) && !_battleTurnController.TryEndPlayerTurn(out string endTurnMessage))
+                {
+                    Debug.LogWarning($"Step11TestDriver Action: end turn failed. {endTurnMessage}");
+                }
             }
 
             if (_context.HasActiveJourneyEncounter)
@@ -103,6 +125,19 @@ namespace OneManJourney.Runtime
                 }
             }
 
+            if (_battleTurnController == null)
+            {
+                if (_context != null)
+                {
+                    _battleTurnController = _context.GetComponent<BattleTurnController>();
+                }
+
+                if (_battleTurnController == null)
+                {
+                    GameServices.TryResolve(out _battleTurnController);
+                }
+            }
+
             if (_context == null || _eventBus == null)
             {
                 return false;
@@ -114,6 +149,12 @@ namespace OneManJourney.Runtime
                 _journeyNodeCompletedSubscription = _eventBus.Subscribe<JourneyNodeCompletedEvent>(HandleJourneyNodeCompleted);
                 _journeyAdvanceBlockedSubscription = _eventBus.Subscribe<JourneyAdvanceBlockedEvent>(HandleJourneyAdvanceBlocked);
                 _battleEncounterPreparedSubscription = _eventBus.Subscribe<BattleEncounterPreparedEvent>(HandleBattleEncounterPrepared);
+                _battleFlowInitializedSubscription = _eventBus.Subscribe<BattleFlowInitializedEvent>(HandleBattleFlowInitialized);
+                _battleTurnStartedSubscription = _eventBus.Subscribe<BattleTurnStartedEvent>(HandleBattleTurnStarted);
+                _battleCardPlayedSubscription = _eventBus.Subscribe<BattleCardPlayedEvent>(HandleBattleCardPlayed);
+                _battleHandDiscardedSubscription = _eventBus.Subscribe<BattleHandDiscardedEvent>(HandleBattleHandDiscarded);
+                _battleEnemyTurnResolvedSubscription = _eventBus.Subscribe<BattleEnemyTurnResolvedEvent>(HandleBattleEnemyTurnResolved);
+                _battleCardsDrawnSubscription = _eventBus.Subscribe<BattleCardsDrawnEvent>(HandleBattleCardsDrawn);
             }
 
             return true;
@@ -125,12 +166,25 @@ namespace OneManJourney.Runtime
             _journeyNodeCompletedSubscription?.Dispose();
             _journeyAdvanceBlockedSubscription?.Dispose();
             _battleEncounterPreparedSubscription?.Dispose();
+            _battleFlowInitializedSubscription?.Dispose();
+            _battleTurnStartedSubscription?.Dispose();
+            _battleCardPlayedSubscription?.Dispose();
+            _battleHandDiscardedSubscription?.Dispose();
+            _battleEnemyTurnResolvedSubscription?.Dispose();
+            _battleCardsDrawnSubscription?.Dispose();
             _journeyNodeEnteredSubscription = null;
             _journeyNodeCompletedSubscription = null;
             _journeyAdvanceBlockedSubscription = null;
             _battleEncounterPreparedSubscription = null;
+            _battleFlowInitializedSubscription = null;
+            _battleTurnStartedSubscription = null;
+            _battleCardPlayedSubscription = null;
+            _battleHandDiscardedSubscription = null;
+            _battleEnemyTurnResolvedSubscription = null;
+            _battleCardsDrawnSubscription = null;
             _eventBus = null;
             _context = null;
+            _battleTurnController = null;
         }
 
         private void OnDestroy()
@@ -168,6 +222,55 @@ namespace OneManJourney.Runtime
                 "Step8TestDriver Event: BattleEncounterPrepared " +
                 $"node={evt.NodeId}, type={evt.NodeType}, seed={evt.EncounterSeed}, enemyCount={evt.EnemyCount}, " +
                 $"queue=[{FormatEnemyQueue(evt.EnemyQueue)}].");
+        }
+
+        private static void HandleBattleFlowInitialized(BattleFlowInitializedEvent evt)
+        {
+            Debug.Log(
+                "Step11TestDriver Event: BattleFlowInitialized " +
+                $"node={evt.NodeId}, type={evt.NodeType}, seed={evt.EncounterSeed}, enemies={evt.EnemyCount}, " +
+                $"draw/hand/discard/exhaust={evt.DrawPileCount}/{evt.HandCount}/{evt.DiscardPileCount}/{evt.ExhaustPileCount}.");
+        }
+
+        private static void HandleBattleTurnStarted(BattleTurnStartedEvent evt)
+        {
+            Debug.Log(
+                "Step11TestDriver Event: TurnStarted " +
+                $"node={evt.NodeId}, turn={evt.TurnNumber}, energy={evt.Energy}, drew={evt.DrawnCardCount}, " +
+                $"draw/hand/discard/exhaust={evt.DrawPileCount}/{evt.HandCount}/{evt.DiscardPileCount}/{evt.ExhaustPileCount}.");
+        }
+
+        private static void HandleBattleCardPlayed(BattleCardPlayedEvent evt)
+        {
+            string cardName = evt.Card == null ? "null" : $"{evt.Card.DisplayName} ({evt.Card.Id})";
+            Debug.Log(
+                "Step11TestDriver Event: CardPlayed " +
+                $"node={evt.NodeId}, turn={evt.TurnNumber}, card={cardName}, energy={evt.EnergyBefore}->{evt.EnergyAfter}, " +
+                $"exhausted={evt.Exhausted}, draw/hand/discard/exhaust={evt.DrawPileCount}/{evt.HandCount}/{evt.DiscardPileCount}/{evt.ExhaustPileCount}.");
+        }
+
+        private static void HandleBattleHandDiscarded(BattleHandDiscardedEvent evt)
+        {
+            Debug.Log(
+                "Step11TestDriver Event: HandDiscarded " +
+                $"node={evt.NodeId}, turn={evt.TurnNumber}, discarded={evt.DiscardedCount}, " +
+                $"draw/hand/discard/exhaust={evt.DrawPileCount}/{evt.HandCount}/{evt.DiscardPileCount}/{evt.ExhaustPileCount}.");
+        }
+
+        private static void HandleBattleEnemyTurnResolved(BattleEnemyTurnResolvedEvent evt)
+        {
+            Debug.Log(
+                "Step11TestDriver Event: EnemyTurnResolved " +
+                $"node={evt.NodeId}, turn={evt.TurnNumber}, enemyCount={evt.EnemyCount}, " +
+                $"draw/hand/discard/exhaust={evt.DrawPileCount}/{evt.HandCount}/{evt.DiscardPileCount}/{evt.ExhaustPileCount}.");
+        }
+
+        private static void HandleBattleCardsDrawn(BattleCardsDrawnEvent evt)
+        {
+            Debug.Log(
+                "Step11TestDriver Event: CardsDrawn " +
+                $"node={evt.NodeId}, turn={evt.TurnNumber}, requested={evt.RequestedCount}, drawn={evt.DrawnCount}, reshuffle={evt.ReshuffleCount}, " +
+                $"draw/hand/discard/exhaust={evt.DrawPileCount}/{evt.HandCount}/{evt.DiscardPileCount}/{evt.ExhaustPileCount}.");
         }
 
         private static string FormatEnemyQueue(IReadOnlyList<EnemyConfig> queue)
@@ -232,6 +335,15 @@ namespace OneManJourney.Runtime
                 status += "\nBlocked: " + _context.LastJourneyAdvanceBlockMessage;
             }
 
+            if (_battleTurnController != null && _battleTurnController.IsActive)
+            {
+                status += "\n\nBattle Turn: " +
+                          $"phase={_battleTurnController.Phase}, turn={_battleTurnController.TurnNumber}, " +
+                          $"energy={_battleTurnController.CurrentEnergy}/{_battleTurnController.MaxEnergyPerTurn}, " +
+                          $"draw/hand/discard/exhaust={_battleTurnController.DrawPile.Count}/" +
+                          $"{_battleTurnController.Hand.Count}/{_battleTurnController.DiscardPile.Count}/{_battleTurnController.ExhaustPile.Count}";
+            }
+
             GUI.Label(new Rect(rect.x + 8, rect.y + 8, rect.width - 16, 108), status);
 
             float buttonTop = rect.y + 118f;
@@ -257,7 +369,7 @@ namespace OneManJourney.Runtime
 
             GUI.Label(
                 new Rect(rect.x + 8f, rect.y + rect.height - 26f, rect.width - 16f, 20f),
-                $"[{_selectFirstNodeHotkey}/{_selectSecondNodeHotkey}] Select Next  [{_completeNodeHotkey}] Complete  [{_depleteFoodHotkey}] Food=0");
+                $"[{_selectFirstNodeHotkey}/{_selectSecondNodeHotkey}] Select Next  [{_completeNodeHotkey}] Complete  [{_depleteFoodHotkey}] Food=0  [{_playCardHotkey}] Play  [{_endTurnHotkey}] EndTurn");
         }
     }
 }

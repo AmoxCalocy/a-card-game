@@ -134,6 +134,237 @@ namespace OneManJourney.Runtime
         public int EnemyCount { get; }
     }
 
+    public enum BattleTurnPhase
+    {
+        None = 0,
+        PlayerTurn,
+        EnemyTurn
+    }
+
+    public readonly struct BattleFlowInitializedEvent
+    {
+        public BattleFlowInitializedEvent(
+            int nodeId,
+            JourneyNodeType nodeType,
+            int encounterSeed,
+            int enemyCount,
+            int drawPileCount,
+            int handCount,
+            int discardPileCount,
+            int exhaustPileCount)
+        {
+            NodeId = nodeId;
+            NodeType = nodeType;
+            EncounterSeed = encounterSeed;
+            EnemyCount = enemyCount;
+            DrawPileCount = drawPileCount;
+            HandCount = handCount;
+            DiscardPileCount = discardPileCount;
+            ExhaustPileCount = exhaustPileCount;
+        }
+
+        public int NodeId { get; }
+        public JourneyNodeType NodeType { get; }
+        public int EncounterSeed { get; }
+        public int EnemyCount { get; }
+        public int DrawPileCount { get; }
+        public int HandCount { get; }
+        public int DiscardPileCount { get; }
+        public int ExhaustPileCount { get; }
+    }
+
+    public readonly struct BattleTurnStartedEvent
+    {
+        public BattleTurnStartedEvent(
+            int nodeId,
+            int turnNumber,
+            int energy,
+            int drawnCardCount,
+            int handCount,
+            int drawPileCount,
+            int discardPileCount,
+            int exhaustPileCount)
+        {
+            NodeId = nodeId;
+            TurnNumber = turnNumber;
+            Energy = energy;
+            DrawnCardCount = drawnCardCount;
+            HandCount = handCount;
+            DrawPileCount = drawPileCount;
+            DiscardPileCount = discardPileCount;
+            ExhaustPileCount = exhaustPileCount;
+        }
+
+        public int NodeId { get; }
+        public int TurnNumber { get; }
+        public int Energy { get; }
+        public int DrawnCardCount { get; }
+        public int HandCount { get; }
+        public int DrawPileCount { get; }
+        public int DiscardPileCount { get; }
+        public int ExhaustPileCount { get; }
+    }
+
+    public readonly struct BattleCardPlayedEvent
+    {
+        public BattleCardPlayedEvent(
+            int nodeId,
+            int turnNumber,
+            CardConfig card,
+            int energyBefore,
+            int energyAfter,
+            bool exhausted,
+            int handCount,
+            int drawPileCount,
+            int discardPileCount,
+            int exhaustPileCount)
+        {
+            NodeId = nodeId;
+            TurnNumber = turnNumber;
+            Card = card;
+            EnergyBefore = energyBefore;
+            EnergyAfter = energyAfter;
+            Exhausted = exhausted;
+            HandCount = handCount;
+            DrawPileCount = drawPileCount;
+            DiscardPileCount = discardPileCount;
+            ExhaustPileCount = exhaustPileCount;
+        }
+
+        public int NodeId { get; }
+        public int TurnNumber { get; }
+        public CardConfig Card { get; }
+        public int EnergyBefore { get; }
+        public int EnergyAfter { get; }
+        public bool Exhausted { get; }
+        public int HandCount { get; }
+        public int DrawPileCount { get; }
+        public int DiscardPileCount { get; }
+        public int ExhaustPileCount { get; }
+    }
+
+    public readonly struct BattleHandDiscardedEvent
+    {
+        public BattleHandDiscardedEvent(
+            int nodeId,
+            int turnNumber,
+            int discardedCount,
+            int handCount,
+            int drawPileCount,
+            int discardPileCount,
+            int exhaustPileCount)
+        {
+            NodeId = nodeId;
+            TurnNumber = turnNumber;
+            DiscardedCount = discardedCount;
+            HandCount = handCount;
+            DrawPileCount = drawPileCount;
+            DiscardPileCount = discardPileCount;
+            ExhaustPileCount = exhaustPileCount;
+        }
+
+        public int NodeId { get; }
+        public int TurnNumber { get; }
+        public int DiscardedCount { get; }
+        public int HandCount { get; }
+        public int DrawPileCount { get; }
+        public int DiscardPileCount { get; }
+        public int ExhaustPileCount { get; }
+    }
+
+    public readonly struct BattleEnemyTurnResolvedEvent
+    {
+        public BattleEnemyTurnResolvedEvent(
+            int nodeId,
+            int turnNumber,
+            int enemyCount,
+            int handCount,
+            int drawPileCount,
+            int discardPileCount,
+            int exhaustPileCount)
+        {
+            NodeId = nodeId;
+            TurnNumber = turnNumber;
+            EnemyCount = enemyCount;
+            HandCount = handCount;
+            DrawPileCount = drawPileCount;
+            DiscardPileCount = discardPileCount;
+            ExhaustPileCount = exhaustPileCount;
+        }
+
+        public int NodeId { get; }
+        public int TurnNumber { get; }
+        public int EnemyCount { get; }
+        public int HandCount { get; }
+        public int DrawPileCount { get; }
+        public int DiscardPileCount { get; }
+        public int ExhaustPileCount { get; }
+    }
+
+    public readonly struct BattleCardsDrawnEvent
+    {
+        public BattleCardsDrawnEvent(
+            int nodeId,
+            int turnNumber,
+            int requestedCount,
+            int drawnCount,
+            int reshuffleCount,
+            int handCount,
+            int drawPileCount,
+            int discardPileCount,
+            int exhaustPileCount)
+        {
+            NodeId = nodeId;
+            TurnNumber = turnNumber;
+            RequestedCount = requestedCount;
+            DrawnCount = drawnCount;
+            ReshuffleCount = reshuffleCount;
+            HandCount = handCount;
+            DrawPileCount = drawPileCount;
+            DiscardPileCount = discardPileCount;
+            ExhaustPileCount = exhaustPileCount;
+        }
+
+        public int NodeId { get; }
+        public int TurnNumber { get; }
+        public int RequestedCount { get; }
+        public int DrawnCount { get; }
+        public int ReshuffleCount { get; }
+        public int HandCount { get; }
+        public int DrawPileCount { get; }
+        public int DiscardPileCount { get; }
+        public int ExhaustPileCount { get; }
+    }
+
+    public readonly struct BattleFlowEndedEvent
+    {
+        public BattleFlowEndedEvent(
+            int nodeId,
+            int turnNumber,
+            string reason,
+            int handCount,
+            int drawPileCount,
+            int discardPileCount,
+            int exhaustPileCount)
+        {
+            NodeId = nodeId;
+            TurnNumber = turnNumber;
+            Reason = reason ?? string.Empty;
+            HandCount = handCount;
+            DrawPileCount = drawPileCount;
+            DiscardPileCount = discardPileCount;
+            ExhaustPileCount = exhaustPileCount;
+        }
+
+        public int NodeId { get; }
+        public int TurnNumber { get; }
+        public string Reason { get; }
+        public int HandCount { get; }
+        public int DrawPileCount { get; }
+        public int DiscardPileCount { get; }
+        public int ExhaustPileCount { get; }
+    }
+
     public readonly struct JourneyNodeEnteredEvent
     {
         public JourneyNodeEnteredEvent(int previousNodeId, int targetNodeId, JourneyNodeType nodeType, string sceneName)

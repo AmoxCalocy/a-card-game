@@ -276,3 +276,31 @@
   - 进入战斗时可稳定输出队列一致性日志，`match=True`。
   - 节点配置队列与激活队列一致，满足“进入战斗时敌人列表与节点配置一致”的验收标准。
   - 验证结论：第10步验收通过。
+
+## 回合流程层（2026-04-30，实施计划第11步）
+- 目标：将战斗入口扩展为可运行的回合循环，形成“玩家回合 -> 出牌 -> 弃牌 -> 敌方阶段 -> 下一回合抽牌”的闭环，并保证能量与牌堆计数可观测、可验证。
+- 关键架构洞察：
+  - 回合状态集中在单点控制器（`BattleTurnController`），避免 UI、输入驱动、上下文层各自维护一份回合状态导致分叉。
+  - 抽牌系统采用“抽牌堆空时回洗弃牌堆”的策略，并且每次抽牌前做边界判定，保证不发生下标越界。
+  - 回合推进通过事件总线发布，不把验证逻辑硬编码在控制器里，便于后续替换 UI、接入自动化测试与录像回放。
+- 文件职责（第11步相关）：
+  - `Assets/Scripts/Core/BattleTurnController.cs`
+    - 第11步核心控制器，负责战斗回合生命周期、能量重置、抽牌/弃牌/消耗与回洗、回合阶段切换。
+    - 在进入 `Battle/Boss` 节点时基于 `GameContext.ActiveBattleEncounterConfig` 初始化战斗流；在节点完成或离开战斗节点时结束战斗流。
+    - 对外暴露只读运行时状态（phase/turn/energy/draw/hand/discard/exhaust）供调试面板和测试驱动读取。
+  - `Assets/Scripts/Core/GameEventMessages.cs`
+    - 扩展第11步事件契约与 `BattleTurnPhase` 枚举，作为回合层与 UI/测试层之间的稳定接口。
+  - `Assets/Scripts/Core/GameContextBootstrap.cs`
+    - 启动引导扩展，自动确保 `BattleTurnController` 注入，避免场景切换后因漏挂组件导致回合系统失活。
+  - `Assets/Scripts/Core/GameContextDebugPanel.cs`
+    - 第11步可视化观察层，展示回合阶段、能量、牌堆计数与手牌摘要，用于快速人工验收与问题定位。
+  - `Assets/Scripts/Core/GameContextStep8TestDriver.cs`
+    - 第11步手工回归入口，新增 `P`/`E` 热键与回合事件日志，支持“打牌 -> 结束回合 -> 下一回合”连续验证。
+- 生命周期与数据流（第11步）：
+  - 进入战斗节点后：`GameContext` 准备遭遇配置 -> `BattleTurnController` 初始化牌堆并发布 `BattleFlowInitializedEvent`。
+  - 开始玩家回合：控制器重置能量并抽牌，发布 `BattleCardsDrawnEvent` 与 `BattleTurnStartedEvent`。
+  - 出牌与结束回合：出牌发布 `BattleCardPlayedEvent`；结束回合后依次发布 `BattleHandDiscardedEvent`、`BattleEnemyTurnResolvedEvent`，随后开启下一玩家回合。
+  - 结束战斗流：发布 `BattleFlowEndedEvent` 并清空运行时状态。
+- 边界与后续：
+  - 本层仅负责回合流程骨架与牌堆/能量流转，不负责具体卡牌效果执行（第12步范围）。
+  - 当前敌方阶段为“流程占位 + 事件发布”，敌方意图与具体行动规则在后续步骤实现。

@@ -100,3 +100,11 @@
 - 验证通过：从战斗节点进入 `BattleScene` 时，敌方队列与节点配置一致（`Step10Verifier` 日志 `match=True`），满足“进入战斗时敌人列表与节点配置一致”的实施计划第10步验收标准。
 - 验证过程配套日志：`Step8TestDriver Event: BattleEncounterPrepared ... queue=[...]` 与 `Step10Verifier: Battle entry loaded ... nodeConfig=[...], activeQueue=[...], match=True`。
 - 约束执行：在你确认第10步验证通过前未开始第11步；当前仅完成第10步与文档同步。
+
+2026-04-30：完成实施计划第11步（回合流程）并验证通过（由测试执行）
+- 新增 `BattleTurnController`，实现战斗回合主循环：玩家回合（能量重置/抽牌）-> 出牌 -> 弃牌 -> 敌方行动阶段 -> 下一回合抽牌补满。
+- 回合内统一使用共享能量池，出牌按 `CardConfig.EnergyCost` 扣能量，并按 `ExhaustOnPlay` 进入 `ExhaustPile` 或 `DiscardPile`。
+- 抽牌逻辑加入弃牌堆回洗（reshuffle）并带边界保护，避免卡堆越界与空堆异常。
+- 新增并接入回合事件：`BattleFlowInitializedEvent`、`BattleTurnStartedEvent`、`BattleCardPlayedEvent`、`BattleHandDiscardedEvent`、`BattleEnemyTurnResolvedEvent`、`BattleCardsDrawnEvent`、`BattleFlowEndedEvent`。
+- `GameContextDebugPanel` 与 `GameContextStep8TestDriver` 已接入第11步事件与状态展示，支持热键 `P`（打第一张可打牌）和 `E`（结束回合）做手工回归。
+- 验证结论：已满足第11步验收标准（每回合能量重置、抽弃牌计数正确、无卡堆越界）；按约束未开始第12步。
