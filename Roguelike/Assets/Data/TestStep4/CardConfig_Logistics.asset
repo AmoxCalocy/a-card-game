@@ -10,15 +10,15 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 3ea70d409c1243819401fd7662fef6bd, type: 3}
-  m_Name: Card_Step12_Strike
+  m_Name: Card_Step12_Logistics
   m_EditorClassIdentifier: 
-  _id: card.step12.strike
-  _displayName: 破甲斩
-  _description: 对首个存活敌人造成6点伤害，并施加2层流血。
-  _cardType: 0
+  _id: card.step12.logistics
+  _displayName: 战地医护
+  _description: 回复5点生命，并叠加1层士气。
+  _cardType: 4
   _rarity: 0
   _energyCost: 1
-  _baseValue: 6
-  _statusEffect: 1
-  _statusStacks: 2
+  _baseValue: 5
+  _statusEffect: 3
+  _statusStacks: 1
   _exhaustOnPlay: 0

@@ -304,3 +304,64 @@
 - 边界与后续：
   - 本层仅负责回合流程骨架与牌堆/能量流转，不负责具体卡牌效果执行（第12步范围）。
   - 当前敌方阶段为“流程占位 + 事件发布”，敌方意图与具体行动规则在后续步骤实现。
+
+## 卡牌效果框架层（2026-05-11，实施计划第12步）
+- 目标：将第11步“可出牌但仅消耗资源”的回合骨架扩展为“按牌类型执行可观测效果”的战斗能力，形成“出牌 -> 执行效果 -> 状态变化 -> 事件广播”的闭环，并支持状态叠层验证。
+- 关键架构洞察：
+  - 将“单位状态”从控制器临时变量抽离到独立模型 `BattleCombatantState`，把生命/护甲/状态叠层逻辑集中，避免后续敌方 AI、遗物、DOT 结算重复实现。
+  - 出牌事件继续沿用事件总线，但载荷升级为“意图 + 结果”双信息结构（卡牌原始参数 + 实际效果数值），使 UI、日志、自动化验证不需窥探控制器内部状态。
+  - 牌类型映射先采用稳定规则（Attack/Defense/Strategy/Logistics/Tactic），保持可迭代的最小实现：先保证语义可验，再逐步扩展复杂特效脚本化。
+
+- 文件职责（第12步相关）：
+  - `Assets/Scripts/Core/BattleCombatantState.cs`
+    - 运行时单位状态对象（玩家/敌人共用）：管理 `CurrentHealth`、`Armor`、状态栈字典与 `ApplyDamage`/`AddArmor`/`Heal`/`AddStatus`。
+    - 提供 `GetStatusSummary()` 作为调试输出的统一来源，减少面板/日志重复拼接状态字符串。
+  - `Assets/Scripts/Core/BattleTurnController.cs`
+    - 新增 `_playerState`、`_enemyStates` 与初始化逻辑，在进入战斗节点后构建战斗快照。
+    - 在 `TryPlayCard` 中调用 `ExecuteCardEffect` 执行 5 类卡效：
+      - `Attack`：对首个存活敌人造成伤害并附加状态。
+      - `Defense`：为玩家增加护甲并附加状态。
+      - `Strategy`：额外抽牌，并可附加玩家状态。
+      - `Logistics`：为玩家治疗并附加状态。
+      - `Tactic`：对首个目标造成伤害，并对所有存活敌人叠加状态。
+    - 持有 `LastCardEffectSummary`，作为调试面板“最近一次效果”文本源。
+  - `Assets/Scripts/Core/GameEventMessages.cs`
+    - 扩展 `BattleCardPlayedEvent`：新增 `CardType`、`CardBaseValue`、`StatusEffect`、`RequestedStatusStacks` 与实际结果字段（伤害/护甲/治疗/抽牌/状态叠层/摘要）。
+    - 作用：让外部观测层可直接判定“描述是否生效”，无需访问控制器私有字段。
+  - `Assets/Scripts/Core/GameContextDebugPanel.cs`
+    - 新增战斗效果观测区：玩家 HP/护甲/状态、敌方逐单位状态、最后一次卡效摘要。
+    - 作用：第12步手工验收主界面，便于快速核对“数值变化 + 状态叠层”。
+  - `Assets/Scripts/Core/GameContextStep8TestDriver.cs`
+    - 扩展出牌日志，输出卡效结果明细（dmg/armor/heal/draw/status + summary）。
+    - 作用：与面板互补，提供可复制的 Console 验收证据。
+  - `Assets/Data/TestStep4/CardConfig.asset`
+    - Step12 攻击示例牌（破甲斩）：用于验证伤害 + 流血叠层。
+  - `Assets/Data/TestStep4/CardConfig_Defense.asset`
+    - Step12 防御示例牌（坚守阵线）：用于验证护甲 + 士气叠层。
+  - `Assets/Data/TestStep4/CardConfig_Strategy.asset`
+    - Step12 策略示例牌（侦察预案）：用于验证额外抽牌。
+  - `Assets/Data/TestStep4/CardConfig_Logistics.asset`
+    - Step12 后勤示例牌（战地医护）：用于验证治疗 + 士气叠层。
+  - `Assets/Data/TestStep4/CardConfig_Tactic.asset`
+    - Step12 战术示例牌（包围网）：用于验证单体伤害 + 群体围捕叠层。
+
+- 生命周期与数据流（第12步）：
+  - 进入 Battle/Boss 节点后，`BattleTurnController` 初始化玩家与敌方状态。
+  - 玩家出牌时：
+    - 先完成能量消耗与手牌迁移（弃牌/消耗堆）。
+    - 再执行 `ExecuteCardEffect` 写入单位状态（HP/Armor/Status）与抽牌变化。
+    - 最后发布扩展后的 `BattleCardPlayedEvent`，调试面板与测试驱动即时刷新。
+  - 回合结束与下回合开始保持第11步流程不变（弃牌 -> 敌方阶段占位 -> 回合开始抽牌）。
+
+- 边界与后续：
+  - 本层仅实现“卡牌类型 -> 基础效果映射”，未引入卡牌脚本化 DSL、触发连锁、遗物联动与持续伤害结算。
+  - 第13步敌人 AI 意图系统尚未开始；当前敌方仍为回合占位与状态承载。
+
+## 第12步验证状态（2026-05-11）
+- 验证环境：Unity 2022.3.62f2c1，`Assets/Scenes/SampleScene.unity` + `BattleScene.unity`。
+- 验证方法：通过 `GameContextStep8TestDriver` 进入战斗节点，循环出牌并观察 `GameContextDebugPanel` 与 Console 事件日志。
+- 验证结果：
+  - 5 张示例牌均按描述生效（攻击、防御、策略抽牌、后勤治疗、战术群体状态）。
+  - 状态可叠层（示例：`Bleed` 可连续增长）。
+  - `BattleCardPlayedEvent` 明细与面板状态一致，可用于后续自动化断言。
+- 验证结论：第12步验收通过；按约束未开始第13步。

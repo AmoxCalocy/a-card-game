@@ -13,12 +13,16 @@ namespace OneManJourney.Runtime
         [SerializeField] private int _maxEnergyPerTurn = 3;
         [Min(1)]
         [SerializeField] private int _cardsDrawPerTurn = 5;
+        [Header("Player Combat Stats")]
+        [Min(1)]
+        [SerializeField] private int _playerMaxHealth = 40;
 
         private readonly List<CardConfig> _drawPile = new List<CardConfig>();
         private readonly List<CardConfig> _hand = new List<CardConfig>();
         private readonly List<CardConfig> _discardPile = new List<CardConfig>();
         private readonly List<CardConfig> _exhaustPile = new List<CardConfig>();
         private readonly List<EnemyConfig> _enemyQueue = new List<EnemyConfig>();
+        private readonly List<BattleCombatantState> _enemyStates = new List<BattleCombatantState>();
         private GameContext _context;
         private GameEventBus _eventBus;
         private IDisposable _journeyNodeEnteredSubscription;
@@ -30,16 +34,24 @@ namespace OneManJourney.Runtime
         private JourneyNodeType _activeNodeType = JourneyNodeType.Battle;
         private BattleTurnPhase _phase = BattleTurnPhase.None;
         private System.Random _random;
+        private BattleCombatantState _playerState;
+        private string _lastCardEffectSummary = string.Empty;
 
         public bool IsActive => _isActive;
         public int TurnNumber => _turnNumber;
         public int CurrentEnergy => _currentEnergy;
         public int MaxEnergyPerTurn => Mathf.Max(1, _maxEnergyPerTurn);
         public int CardsDrawPerTurn => Mathf.Max(1, _cardsDrawPerTurn);
+        public int PlayerMaxHealth => _playerState == null ? Mathf.Max(1, _playerMaxHealth) : _playerState.MaxHealth;
+        public int PlayerCurrentHealth => _playerState == null ? PlayerMaxHealth : _playerState.CurrentHealth;
+        public int PlayerArmor => _playerState == null ? 0 : _playerState.Armor;
+        public string PlayerStatusSummary => _playerState == null ? "none" : _playerState.GetStatusSummary();
+        public string LastCardEffectSummary => string.IsNullOrWhiteSpace(_lastCardEffectSummary) ? "none" : _lastCardEffectSummary;
         public int ActiveNodeId => _activeNodeId;
         public JourneyNodeType ActiveNodeType => _activeNodeType;
         public BattleTurnPhase Phase => _phase;
         public IReadOnlyList<EnemyConfig> EnemyQueue => _enemyQueue;
+        public IReadOnlyList<BattleCombatantState> EnemyStates => _enemyStates;
         public IReadOnlyList<CardConfig> DrawPile => _drawPile;
         public IReadOnlyList<CardConfig> Hand => _hand;
         public IReadOnlyList<CardConfig> DiscardPile => _discardPile;
@@ -118,13 +130,25 @@ namespace OneManJourney.Runtime
                 _discardPile.Add(card);
             }
 
+            CardEffectResult result = ExecuteCardEffect(card);
+            _lastCardEffectSummary = result.Summary;
             Publish(new BattleCardPlayedEvent(
                 _activeNodeId,
                 _turnNumber,
                 card,
+                card.CardType,
+                Mathf.Max(0, card.BaseValue),
+                card.StatusEffect,
+                Mathf.Max(0, card.StatusStacks),
                 energyBefore,
                 _currentEnergy,
                 exhausted,
+                result.DamageApplied,
+                result.ArmorApplied,
+                result.HealingApplied,
+                result.CardsDrawn,
+                result.StatusStacksApplied,
+                result.Summary,
                 _hand.Count,
                 _drawPile.Count,
                 _discardPile.Count,
@@ -296,6 +320,7 @@ namespace OneManJourney.Runtime
             _currentEnergy = 0;
             _enemyQueue.Clear();
             _enemyQueue.AddRange(encounter.EnemyQueue);
+            InitializeBattleState();
             BuildStartingDeck(encounter.EncounterSeed);
             Publish(new BattleFlowInitializedEvent(
                 _activeNodeId,
@@ -330,6 +355,170 @@ namespace OneManJourney.Runtime
 
             _random = new System.Random(seed);
             Shuffle(_drawPile);
+        }
+
+        private void InitializeBattleState()
+        {
+            _playerState = new BattleCombatantState(
+                "player",
+                "Player",
+                Mathf.Max(1, _playerMaxHealth),
+                0);
+
+            _enemyStates.Clear();
+            for (int i = 0; i < _enemyQueue.Count; i++)
+            {
+                EnemyConfig enemyConfig = _enemyQueue[i];
+                if (enemyConfig == null)
+                {
+                    _enemyStates.Add(new BattleCombatantState(
+                        $"enemy-{i}",
+                        $"Enemy {i + 1}",
+                        1,
+                        0));
+                    continue;
+                }
+
+                _enemyStates.Add(new BattleCombatantState(
+                    enemyConfig.Id,
+                    enemyConfig.DisplayName,
+                    enemyConfig.MaxHealth,
+                    enemyConfig.BaseDefense,
+                    enemyConfig));
+            }
+
+            _lastCardEffectSummary = "Battle initialized.";
+        }
+
+        private CardEffectResult ExecuteCardEffect(CardConfig card)
+        {
+            int baseValue = Mathf.Max(0, card.BaseValue);
+            int requestedStacks = Mathf.Max(0, card.StatusStacks);
+            StatusEffectType statusEffect = card.StatusEffect;
+            var result = new CardEffectResult();
+
+            switch (card.CardType)
+            {
+                case CardType.Attack:
+                {
+                    BattleCombatantState target = GetFirstAliveEnemy();
+                    if (target == null)
+                    {
+                        result.Summary = "Attack had no valid enemy target.";
+                        break;
+                    }
+
+                    result.DamageApplied = target.ApplyDamage(baseValue);
+                    result.StatusStacksApplied = target.AddStatus(statusEffect, requestedStacks);
+                    result.Summary = $"Attack -> {FormatCombatantState(target)}; damage={result.DamageApplied}, status+={result.StatusStacksApplied}.";
+                    break;
+                }
+                case CardType.Defense:
+                {
+                    if (_playerState == null)
+                    {
+                        result.Summary = "Defense effect skipped because player state is missing.";
+                        break;
+                    }
+
+                    result.ArmorApplied = _playerState.AddArmor(baseValue);
+                    result.StatusStacksApplied = _playerState.AddStatus(statusEffect, requestedStacks);
+                    result.Summary = $"Defense -> {FormatCombatantState(_playerState)}; armor+={result.ArmorApplied}, status+={result.StatusStacksApplied}.";
+                    break;
+                }
+                case CardType.Strategy:
+                {
+                    result.CardsDrawn = DrawCards(baseValue);
+                    if (_playerState != null)
+                    {
+                        result.StatusStacksApplied = _playerState.AddStatus(statusEffect, requestedStacks);
+                        result.Summary = $"Strategy -> draw+={result.CardsDrawn}, player={FormatCombatantState(_playerState)}, status+={result.StatusStacksApplied}.";
+                    }
+                    else
+                    {
+                        result.Summary = $"Strategy -> draw+={result.CardsDrawn}.";
+                    }
+
+                    break;
+                }
+                case CardType.Logistics:
+                {
+                    if (_playerState == null)
+                    {
+                        result.Summary = "Logistics effect skipped because player state is missing.";
+                        break;
+                    }
+
+                    result.HealingApplied = _playerState.Heal(baseValue);
+                    result.StatusStacksApplied = _playerState.AddStatus(statusEffect, requestedStacks);
+                    result.Summary = $"Logistics -> {FormatCombatantState(_playerState)}; heal+={result.HealingApplied}, status+={result.StatusStacksApplied}.";
+                    break;
+                }
+                case CardType.Tactic:
+                {
+                    BattleCombatantState target = GetFirstAliveEnemy();
+                    if (target != null && baseValue > 0)
+                    {
+                        result.DamageApplied = target.ApplyDamage(baseValue);
+                    }
+
+                    result.StatusStacksApplied = AddStatusToAliveEnemies(statusEffect, requestedStacks);
+                    string targetSummary = target == null ? "none" : FormatCombatantState(target);
+                    result.Summary = $"Tactic -> target={targetSummary}, damage={result.DamageApplied}, totalStatusApplied={result.StatusStacksApplied}.";
+                    break;
+                }
+                default:
+                {
+                    result.Summary = $"Card type {card.CardType} is not mapped to a runtime effect.";
+                    break;
+                }
+            }
+
+            return result;
+        }
+
+        private BattleCombatantState GetFirstAliveEnemy()
+        {
+            for (int i = 0; i < _enemyStates.Count; i++)
+            {
+                if (!_enemyStates[i].IsDefeated)
+                {
+                    return _enemyStates[i];
+                }
+            }
+
+            return null;
+        }
+
+        private int AddStatusToAliveEnemies(StatusEffectType statusEffect, int stacks)
+        {
+            if (statusEffect == StatusEffectType.None || stacks <= 0)
+            {
+                return 0;
+            }
+
+            int total = 0;
+            for (int i = 0; i < _enemyStates.Count; i++)
+            {
+                if (_enemyStates[i].IsDefeated)
+                {
+                    continue;
+                }
+
+                total += _enemyStates[i].AddStatus(statusEffect, stacks);
+            }
+
+            return total;
+        }
+
+        private static string FormatCombatantState(BattleCombatantState state)
+        {
+            if (state == null)
+            {
+                return "null";
+            }
+
+            return $"{state.DisplayName}(HP {state.CurrentHealth}/{state.MaxHealth}, Armor {state.Armor}, Status {state.GetStatusSummary()})";
         }
 
         private void BeginPlayerTurn()
@@ -470,11 +659,24 @@ namespace OneManJourney.Runtime
             _discardPile.Clear();
             _exhaustPile.Clear();
             _enemyQueue.Clear();
+            _enemyStates.Clear();
+            _playerState = null;
+            _lastCardEffectSummary = string.Empty;
         }
 
         private void Publish<TEvent>(TEvent gameEvent)
         {
             _eventBus?.Publish(gameEvent);
+        }
+
+        private struct CardEffectResult
+        {
+            public int DamageApplied;
+            public int ArmorApplied;
+            public int HealingApplied;
+            public int CardsDrawn;
+            public int StatusStacksApplied;
+            public string Summary;
         }
     }
 }

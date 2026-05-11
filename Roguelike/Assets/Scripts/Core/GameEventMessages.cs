@@ -211,9 +211,19 @@ namespace OneManJourney.Runtime
             int nodeId,
             int turnNumber,
             CardConfig card,
+            CardType cardType,
+            int cardBaseValue,
+            StatusEffectType statusEffect,
+            int requestedStatusStacks,
             int energyBefore,
             int energyAfter,
             bool exhausted,
+            int damageApplied,
+            int armorApplied,
+            int healingApplied,
+            int cardsDrawnByEffect,
+            int statusStacksApplied,
+            string effectSummary,
             int handCount,
             int drawPileCount,
             int discardPileCount,
@@ -222,9 +232,19 @@ namespace OneManJourney.Runtime
             NodeId = nodeId;
             TurnNumber = turnNumber;
             Card = card;
+            CardType = cardType;
+            CardBaseValue = cardBaseValue;
+            StatusEffect = statusEffect;
+            RequestedStatusStacks = requestedStatusStacks;
             EnergyBefore = energyBefore;
             EnergyAfter = energyAfter;
             Exhausted = exhausted;
+            DamageApplied = damageApplied;
+            ArmorApplied = armorApplied;
+            HealingApplied = healingApplied;
+            CardsDrawnByEffect = cardsDrawnByEffect;
+            StatusStacksApplied = statusStacksApplied;
+            EffectSummary = effectSummary ?? string.Empty;
             HandCount = handCount;
             DrawPileCount = drawPileCount;
             DiscardPileCount = discardPileCount;
@@ -234,9 +254,19 @@ namespace OneManJourney.Runtime
         public int NodeId { get; }
         public int TurnNumber { get; }
         public CardConfig Card { get; }
+        public CardType CardType { get; }
+        public int CardBaseValue { get; }
+        public StatusEffectType StatusEffect { get; }
+        public int RequestedStatusStacks { get; }
         public int EnergyBefore { get; }
         public int EnergyAfter { get; }
         public bool Exhausted { get; }
+        public int DamageApplied { get; }
+        public int ArmorApplied { get; }
+        public int HealingApplied { get; }
+        public int CardsDrawnByEffect { get; }
+        public int StatusStacksApplied { get; }
+        public string EffectSummary { get; }
         public int HandCount { get; }
         public int DrawPileCount { get; }
         public int DiscardPileCount { get; }

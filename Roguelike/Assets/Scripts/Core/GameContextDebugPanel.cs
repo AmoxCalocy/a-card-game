@@ -523,8 +523,30 @@ namespace OneManJourney.Runtime
             _builder.AppendLine($"- Phase: {_battleTurnController.Phase}");
             _builder.AppendLine($"- Turn: {_battleTurnController.TurnNumber}");
             _builder.AppendLine($"- Energy: {_battleTurnController.CurrentEnergy}/{_battleTurnController.MaxEnergyPerTurn}");
+            _builder.AppendLine($"- Player HP/Armor: {_battleTurnController.PlayerCurrentHealth}/{_battleTurnController.PlayerMaxHealth} | {_battleTurnController.PlayerArmor}");
+            _builder.AppendLine($"- Player Status: {_battleTurnController.PlayerStatusSummary}");
             _builder.AppendLine($"- Enemy Count: {_battleTurnController.EnemyQueue.Count}");
             _builder.AppendLine($"- Draw/Hand/Discard/Exhaust: {_battleTurnController.DrawPile.Count}/{_battleTurnController.Hand.Count}/{_battleTurnController.DiscardPile.Count}/{_battleTurnController.ExhaustPile.Count}");
+            _builder.AppendLine($"- Last Effect: {_battleTurnController.LastCardEffectSummary}");
+
+            if (_battleTurnController.EnemyStates.Count > 0)
+            {
+                _builder.AppendLine("- Enemies:");
+                for (int index = 0; index < _battleTurnController.EnemyStates.Count; index++)
+                {
+                    BattleCombatantState enemyState = _battleTurnController.EnemyStates[index];
+                    if (enemyState == null)
+                    {
+                        _builder.AppendLine($"  - [{index}] null");
+                        continue;
+                    }
+
+                    string defeatedLabel = enemyState.IsDefeated ? "Defeated" : "Alive";
+                    _builder.AppendLine(
+                        $"  - [{index}] {enemyState.DisplayName} {defeatedLabel} " +
+                        $"HP {enemyState.CurrentHealth}/{enemyState.MaxHealth}, Armor {enemyState.Armor}, Status {enemyState.GetStatusSummary()}");
+                }
+            }
 
             if (_battleTurnController.Hand.Count == 0)
             {

@@ -245,8 +245,10 @@ namespace OneManJourney.Runtime
             string cardName = evt.Card == null ? "null" : $"{evt.Card.DisplayName} ({evt.Card.Id})";
             Debug.Log(
                 "Step11TestDriver Event: CardPlayed " +
-                $"node={evt.NodeId}, turn={evt.TurnNumber}, card={cardName}, energy={evt.EnergyBefore}->{evt.EnergyAfter}, " +
-                $"exhausted={evt.Exhausted}, draw/hand/discard/exhaust={evt.DrawPileCount}/{evt.HandCount}/{evt.DiscardPileCount}/{evt.ExhaustPileCount}.");
+                $"node={evt.NodeId}, turn={evt.TurnNumber}, card={cardName}, type={evt.CardType}, value={evt.CardBaseValue}, " +
+                $"status={evt.StatusEffect}x{evt.RequestedStatusStacks}, energy={evt.EnergyBefore}->{evt.EnergyAfter}, exhausted={evt.Exhausted}, " +
+                $"effect(dmg/armor/heal/draw/status)={evt.DamageApplied}/{evt.ArmorApplied}/{evt.HealingApplied}/{evt.CardsDrawnByEffect}/{evt.StatusStacksApplied}, " +
+                $"summary='{evt.EffectSummary}', draw/hand/discard/exhaust={evt.DrawPileCount}/{evt.HandCount}/{evt.DiscardPileCount}/{evt.ExhaustPileCount}.");
         }
 
         private static void HandleBattleHandDiscarded(BattleHandDiscardedEvent evt)

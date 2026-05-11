@@ -108,3 +108,20 @@
 - 新增并接入回合事件：`BattleFlowInitializedEvent`、`BattleTurnStartedEvent`、`BattleCardPlayedEvent`、`BattleHandDiscardedEvent`、`BattleEnemyTurnResolvedEvent`、`BattleCardsDrawnEvent`、`BattleFlowEndedEvent`。
 - `GameContextDebugPanel` 与 `GameContextStep8TestDriver` 已接入第11步事件与状态展示，支持热键 `P`（打第一张可打牌）和 `E`（结束回合）做手工回归。
 - 验证结论：已满足第11步验收标准（每回合能量重置、抽弃牌计数正确、无卡堆越界）；按约束未开始第12步。
+
+2026-05-11：完成实施计划第12步（牌类型与效果框架）并验证通过（由测试执行）
+- 新增 `Assets/Scripts/Core/BattleCombatantState.cs`，建立战斗运行时单位状态模型：生命、护甲、状态叠层、受击/治疗/护甲增减接口，供卡效执行统一消费。
+- 扩展 `Assets/Scripts/Core/BattleTurnController.cs`：
+  - 新增玩家与敌方运行时状态（`_playerState`、`_enemyStates`），战斗开始时基于遭遇配置构建单位快照。
+  - 在出牌链路接入 `ExecuteCardEffect`，按 `CardType` 执行攻击/防御/策略/后勤/战术五类效果，并支持状态叠加（如 `Bleed`、`Morale`、`Encircled`）。
+  - 新增效果摘要 `LastCardEffectSummary`，用于调试面板与日志快速比对“描述 -> 实际生效”。
+- 扩展 `Assets/Scripts/Core/GameEventMessages.cs` 的 `BattleCardPlayedEvent` 载荷，补充卡牌类型、基础值、状态请求与实际效果结果（伤害/护甲/治疗/抽牌/状态叠层/摘要）。
+- 更新 `Assets/Scripts/Core/GameContextDebugPanel.cs`，新增战斗观测字段：玩家 HP/护甲/状态、敌方逐单位 HP/护甲/状态、最近一次卡效摘要。
+- 更新 `Assets/Scripts/Core/GameContextStep8TestDriver.cs` 的出牌日志，输出第12步效果结果明细，便于手工验收。
+- 更新/新增 5 张示例牌资产：
+  - `Assets/Data/TestStep4/CardConfig.asset`（Attack：破甲斩）
+  - `Assets/Data/TestStep4/CardConfig_Defense.asset`（Defense：坚守阵线）
+  - `Assets/Data/TestStep4/CardConfig_Strategy.asset`（Strategy：侦察预案）
+  - `Assets/Data/TestStep4/CardConfig_Logistics.asset`（Logistics：战地医护）
+  - `Assets/Data/TestStep4/CardConfig_Tactic.asset`（Tactic：包围网）
+- 验证结论：第12步验收通过（5张示例牌按描述生效，且状态可叠层）；按约束未开始第13步。
