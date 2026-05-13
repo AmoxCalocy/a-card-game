@@ -25,6 +25,18 @@ namespace OneManJourney.Runtime
             {
                 context.gameObject.AddComponent<JourneyNodeSceneRouter>();
             }
+
+            BattleSceneEntryVerifier battleVerifier = FindBattleSceneEntryVerifier();
+            if (battleVerifier == null)
+            {
+                context.gameObject.AddComponent<BattleSceneEntryVerifier>();
+            }
+
+            BattleTurnController battleTurnController = FindBattleTurnController();
+            if (battleTurnController == null)
+            {
+                context.gameObject.AddComponent<BattleTurnController>();
+            }
         }
 
         private static GameContext FindContext()
@@ -52,6 +64,28 @@ namespace OneManJourney.Runtime
         private static JourneyNodeSceneRouter FindSceneRouter()
         {
             JourneyNodeSceneRouter[] items = Resources.FindObjectsOfTypeAll<JourneyNodeSceneRouter>();
+            if (items == null || items.Length == 0)
+            {
+                return null;
+            }
+
+            return items[0];
+        }
+
+        private static BattleSceneEntryVerifier FindBattleSceneEntryVerifier()
+        {
+            BattleSceneEntryVerifier[] items = Resources.FindObjectsOfTypeAll<BattleSceneEntryVerifier>();
+            if (items == null || items.Length == 0)
+            {
+                return null;
+            }
+
+            return items[0];
+        }
+
+        private static BattleTurnController FindBattleTurnController()
+        {
+            BattleTurnController[] items = Resources.FindObjectsOfTypeAll<BattleTurnController>();
             if (items == null || items.Length == 0)
             {
                 return null;

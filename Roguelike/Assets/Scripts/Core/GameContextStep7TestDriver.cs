@@ -6,6 +6,8 @@ namespace OneManJourney.Runtime
     [DisallowMultipleComponent]
     public sealed class GameContextStep7TestDriver : MonoBehaviour
     {
+        private static GameContextStep7TestDriver _instance;
+
         [Header("Hotkeys")]
         [SerializeField] private KeyCode _regenerateMapHotkey = KeyCode.G;
         [SerializeField] private KeyCode _logMapHotkey = KeyCode.M;
@@ -13,6 +15,18 @@ namespace OneManJourney.Runtime
         private GameContext _context;
         private GameEventBus _eventBus;
         private IDisposable _journeyMapGeneratedSubscription;
+
+        private void Awake()
+        {
+            if (_instance != null && _instance != this)
+            {
+                Destroy(gameObject);
+                return;
+            }
+
+            _instance = this;
+            DontDestroyOnLoad(gameObject);
+        }
 
         private void OnEnable()
         {
@@ -85,6 +99,14 @@ namespace OneManJourney.Runtime
             _journeyMapGeneratedSubscription = null;
             _eventBus = null;
             _context = null;
+        }
+
+        private void OnDestroy()
+        {
+            if (_instance == this)
+            {
+                _instance = null;
+            }
         }
 
         private static void HandleMapGenerated(JourneyMapGeneratedEvent evt)
