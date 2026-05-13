@@ -11,11 +11,15 @@ namespace OneManJourney.Data
         [SerializeField] private string _displayName = "New Event";
         [TextArea(2, 5)]
         [SerializeField] private string _description = string.Empty;
+        [SerializeField] private bool _isDisasterEvent;
+        [SerializeField] private DisasterEventType _disasterType = DisasterEventType.None;
         [SerializeField] private List<EventOptionData> _options = new List<EventOptionData>();
 
         public string Id => _id;
         public string DisplayName => _displayName;
         public string Description => _description;
+        public bool IsDisasterEvent => _isDisasterEvent;
+        public DisasterEventType DisasterType => _isDisasterEvent ? _disasterType : DisasterEventType.None;
         public IReadOnlyList<EventOptionData> Options => _options;
     }
 

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using OneManJourney.Data;
 
 namespace OneManJourney.Runtime
@@ -108,10 +109,350 @@ namespace OneManJourney.Runtime
         MissingMap,
         MissingCurrentNode,
         MissingTargetNode,
+        MissingBattleEncounterConfig,
         InvalidPath,
         EncounterAlreadyActive,
         EncounterNotActive,
         InsufficientFood
+    }
+
+    public readonly struct BattleEncounterPreparedEvent
+    {
+        public BattleEncounterPreparedEvent(int nodeId, JourneyNodeType nodeType, int encounterSeed, IReadOnlyList<EnemyConfig> enemyQueue)
+        {
+            NodeId = nodeId;
+            NodeType = nodeType;
+            EncounterSeed = encounterSeed;
+            EnemyQueue = enemyQueue;
+            EnemyCount = enemyQueue?.Count ?? 0;
+        }
+
+        public int NodeId { get; }
+        public JourneyNodeType NodeType { get; }
+        public int EncounterSeed { get; }
+        public IReadOnlyList<EnemyConfig> EnemyQueue { get; }
+        public int EnemyCount { get; }
+    }
+
+    public enum BattleTurnPhase
+    {
+        None = 0,
+        PlayerTurn,
+        EnemyTurn
+    }
+
+    public readonly struct BattleEnemyIntentView
+    {
+        public BattleEnemyIntentView(
+            int enemyIndex,
+            string enemyId,
+            string enemyDisplayName,
+            EnemyIntentType intentType,
+            int intentValue,
+            bool isDefeated,
+            string summary)
+        {
+            EnemyIndex = enemyIndex;
+            EnemyId = enemyId ?? string.Empty;
+            EnemyDisplayName = enemyDisplayName ?? string.Empty;
+            IntentType = intentType;
+            IntentValue = intentValue;
+            IsDefeated = isDefeated;
+            Summary = summary ?? string.Empty;
+        }
+
+        public int EnemyIndex { get; }
+        public string EnemyId { get; }
+        public string EnemyDisplayName { get; }
+        public EnemyIntentType IntentType { get; }
+        public int IntentValue { get; }
+        public bool IsDefeated { get; }
+        public string Summary { get; }
+    }
+
+    public readonly struct BattleEnemyIntentUpdatedEvent
+    {
+        public BattleEnemyIntentUpdatedEvent(
+            int nodeId,
+            int turnNumber,
+            IReadOnlyList<BattleEnemyIntentView> enemyIntents)
+        {
+            NodeId = nodeId;
+            TurnNumber = turnNumber;
+            EnemyIntents = enemyIntents;
+            EnemyCount = enemyIntents?.Count ?? 0;
+        }
+
+        public int NodeId { get; }
+        public int TurnNumber { get; }
+        public IReadOnlyList<BattleEnemyIntentView> EnemyIntents { get; }
+        public int EnemyCount { get; }
+    }
+
+    public readonly struct BattleFlowInitializedEvent
+    {
+        public BattleFlowInitializedEvent(
+            int nodeId,
+            JourneyNodeType nodeType,
+            int encounterSeed,
+            int enemyCount,
+            int drawPileCount,
+            int handCount,
+            int discardPileCount,
+            int exhaustPileCount)
+        {
+            NodeId = nodeId;
+            NodeType = nodeType;
+            EncounterSeed = encounterSeed;
+            EnemyCount = enemyCount;
+            DrawPileCount = drawPileCount;
+            HandCount = handCount;
+            DiscardPileCount = discardPileCount;
+            ExhaustPileCount = exhaustPileCount;
+        }
+
+        public int NodeId { get; }
+        public JourneyNodeType NodeType { get; }
+        public int EncounterSeed { get; }
+        public int EnemyCount { get; }
+        public int DrawPileCount { get; }
+        public int HandCount { get; }
+        public int DiscardPileCount { get; }
+        public int ExhaustPileCount { get; }
+    }
+
+    public readonly struct BattleTurnStartedEvent
+    {
+        public BattleTurnStartedEvent(
+            int nodeId,
+            int turnNumber,
+            int energy,
+            int drawnCardCount,
+            int handCount,
+            int drawPileCount,
+            int discardPileCount,
+            int exhaustPileCount)
+        {
+            NodeId = nodeId;
+            TurnNumber = turnNumber;
+            Energy = energy;
+            DrawnCardCount = drawnCardCount;
+            HandCount = handCount;
+            DrawPileCount = drawPileCount;
+            DiscardPileCount = discardPileCount;
+            ExhaustPileCount = exhaustPileCount;
+        }
+
+        public int NodeId { get; }
+        public int TurnNumber { get; }
+        public int Energy { get; }
+        public int DrawnCardCount { get; }
+        public int HandCount { get; }
+        public int DrawPileCount { get; }
+        public int DiscardPileCount { get; }
+        public int ExhaustPileCount { get; }
+    }
+
+    public readonly struct BattleCardPlayedEvent
+    {
+        public BattleCardPlayedEvent(
+            int nodeId,
+            int turnNumber,
+            CardConfig card,
+            CardType cardType,
+            int cardBaseValue,
+            StatusEffectType statusEffect,
+            int requestedStatusStacks,
+            int energyBefore,
+            int energyAfter,
+            bool exhausted,
+            int damageApplied,
+            int armorApplied,
+            int healingApplied,
+            int cardsDrawnByEffect,
+            int statusStacksApplied,
+            string effectSummary,
+            int handCount,
+            int drawPileCount,
+            int discardPileCount,
+            int exhaustPileCount)
+        {
+            NodeId = nodeId;
+            TurnNumber = turnNumber;
+            Card = card;
+            CardType = cardType;
+            CardBaseValue = cardBaseValue;
+            StatusEffect = statusEffect;
+            RequestedStatusStacks = requestedStatusStacks;
+            EnergyBefore = energyBefore;
+            EnergyAfter = energyAfter;
+            Exhausted = exhausted;
+            DamageApplied = damageApplied;
+            ArmorApplied = armorApplied;
+            HealingApplied = healingApplied;
+            CardsDrawnByEffect = cardsDrawnByEffect;
+            StatusStacksApplied = statusStacksApplied;
+            EffectSummary = effectSummary ?? string.Empty;
+            HandCount = handCount;
+            DrawPileCount = drawPileCount;
+            DiscardPileCount = discardPileCount;
+            ExhaustPileCount = exhaustPileCount;
+        }
+
+        public int NodeId { get; }
+        public int TurnNumber { get; }
+        public CardConfig Card { get; }
+        public CardType CardType { get; }
+        public int CardBaseValue { get; }
+        public StatusEffectType StatusEffect { get; }
+        public int RequestedStatusStacks { get; }
+        public int EnergyBefore { get; }
+        public int EnergyAfter { get; }
+        public bool Exhausted { get; }
+        public int DamageApplied { get; }
+        public int ArmorApplied { get; }
+        public int HealingApplied { get; }
+        public int CardsDrawnByEffect { get; }
+        public int StatusStacksApplied { get; }
+        public string EffectSummary { get; }
+        public int HandCount { get; }
+        public int DrawPileCount { get; }
+        public int DiscardPileCount { get; }
+        public int ExhaustPileCount { get; }
+    }
+
+    public readonly struct BattleHandDiscardedEvent
+    {
+        public BattleHandDiscardedEvent(
+            int nodeId,
+            int turnNumber,
+            int discardedCount,
+            int handCount,
+            int drawPileCount,
+            int discardPileCount,
+            int exhaustPileCount)
+        {
+            NodeId = nodeId;
+            TurnNumber = turnNumber;
+            DiscardedCount = discardedCount;
+            HandCount = handCount;
+            DrawPileCount = drawPileCount;
+            DiscardPileCount = discardPileCount;
+            ExhaustPileCount = exhaustPileCount;
+        }
+
+        public int NodeId { get; }
+        public int TurnNumber { get; }
+        public int DiscardedCount { get; }
+        public int HandCount { get; }
+        public int DrawPileCount { get; }
+        public int DiscardPileCount { get; }
+        public int ExhaustPileCount { get; }
+    }
+
+    public readonly struct BattleEnemyTurnResolvedEvent
+    {
+        public BattleEnemyTurnResolvedEvent(
+            int nodeId,
+            int turnNumber,
+            int enemyCount,
+            int totalDamageToPlayer,
+            int totalArmorGained,
+            int totalResourcesPlundered,
+            string summary,
+            int handCount,
+            int drawPileCount,
+            int discardPileCount,
+            int exhaustPileCount)
+        {
+            NodeId = nodeId;
+            TurnNumber = turnNumber;
+            EnemyCount = enemyCount;
+            TotalDamageToPlayer = totalDamageToPlayer;
+            TotalArmorGained = totalArmorGained;
+            TotalResourcesPlundered = totalResourcesPlundered;
+            Summary = summary ?? string.Empty;
+            HandCount = handCount;
+            DrawPileCount = drawPileCount;
+            DiscardPileCount = discardPileCount;
+            ExhaustPileCount = exhaustPileCount;
+        }
+
+        public int NodeId { get; }
+        public int TurnNumber { get; }
+        public int EnemyCount { get; }
+        public int TotalDamageToPlayer { get; }
+        public int TotalArmorGained { get; }
+        public int TotalResourcesPlundered { get; }
+        public string Summary { get; }
+        public int HandCount { get; }
+        public int DrawPileCount { get; }
+        public int DiscardPileCount { get; }
+        public int ExhaustPileCount { get; }
+    }
+
+    public readonly struct BattleCardsDrawnEvent
+    {
+        public BattleCardsDrawnEvent(
+            int nodeId,
+            int turnNumber,
+            int requestedCount,
+            int drawnCount,
+            int reshuffleCount,
+            int handCount,
+            int drawPileCount,
+            int discardPileCount,
+            int exhaustPileCount)
+        {
+            NodeId = nodeId;
+            TurnNumber = turnNumber;
+            RequestedCount = requestedCount;
+            DrawnCount = drawnCount;
+            ReshuffleCount = reshuffleCount;
+            HandCount = handCount;
+            DrawPileCount = drawPileCount;
+            DiscardPileCount = discardPileCount;
+            ExhaustPileCount = exhaustPileCount;
+        }
+
+        public int NodeId { get; }
+        public int TurnNumber { get; }
+        public int RequestedCount { get; }
+        public int DrawnCount { get; }
+        public int ReshuffleCount { get; }
+        public int HandCount { get; }
+        public int DrawPileCount { get; }
+        public int DiscardPileCount { get; }
+        public int ExhaustPileCount { get; }
+    }
+
+    public readonly struct BattleFlowEndedEvent
+    {
+        public BattleFlowEndedEvent(
+            int nodeId,
+            int turnNumber,
+            string reason,
+            int handCount,
+            int drawPileCount,
+            int discardPileCount,
+            int exhaustPileCount)
+        {
+            NodeId = nodeId;
+            TurnNumber = turnNumber;
+            Reason = reason ?? string.Empty;
+            HandCount = handCount;
+            DrawPileCount = drawPileCount;
+            DiscardPileCount = discardPileCount;
+            ExhaustPileCount = exhaustPileCount;
+        }
+
+        public int NodeId { get; }
+        public int TurnNumber { get; }
+        public string Reason { get; }
+        public int HandCount { get; }
+        public int DrawPileCount { get; }
+        public int DiscardPileCount { get; }
+        public int ExhaustPileCount { get; }
     }
 
     public readonly struct JourneyNodeEnteredEvent
@@ -162,5 +503,28 @@ namespace OneManJourney.Runtime
         public string Message { get; }
         public int CurrentNodeId { get; }
         public int FoodAmount { get; }
+    }
+
+    public readonly struct CrisisDisasterTriggeredEvent
+    {
+        public CrisisDisasterTriggeredEvent(
+            int crisisValue,
+            int triggerThreshold,
+            EventConfig disasterEvent,
+            DisasterEventType disasterType,
+            bool usedFallbackEvent)
+        {
+            CrisisValue = crisisValue;
+            TriggerThreshold = triggerThreshold;
+            DisasterEvent = disasterEvent;
+            DisasterType = disasterType;
+            UsedFallbackEvent = usedFallbackEvent;
+        }
+
+        public int CrisisValue { get; }
+        public int TriggerThreshold { get; }
+        public EventConfig DisasterEvent { get; }
+        public DisasterEventType DisasterType { get; }
+        public bool UsedFallbackEvent { get; }
     }
 }

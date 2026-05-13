@@ -10,15 +10,15 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 3ea70d409c1243819401fd7662fef6bd, type: 3}
-  m_Name: Card_Step12_Strike
+  m_Name: Card_Step12_Tactic
   m_EditorClassIdentifier: 
-  _id: card.step12.strike
-  _displayName: 破甲斩
-  _description: 对首个存活敌人造成6点伤害，并施加2层流血。
-  _cardType: 0
+  _id: card.step12.tactic
+  _displayName: 包围网
+  _description: 对首个存活敌人造成3点伤害，并对所有存活敌人施加1层围捕。
+  _cardType: 3
   _rarity: 0
   _energyCost: 1
-  _baseValue: 6
-  _statusEffect: 1
-  _statusStacks: 2
+  _baseValue: 3
+  _statusEffect: 6
+  _statusStacks: 1
   _exhaustOnPlay: 0

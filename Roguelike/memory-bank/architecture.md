@@ -175,3 +175,236 @@
   - 完成节点后可触发 `JourneyNodeCompletedEvent`，`NodeIndex` 推进、`NodesVisited` 增加、粮食按步扣减。
   - 粮食归零后触发 `JourneyAdvanceBlockedEvent(InsufficientFood)`，前进被禁止并显示提示。
   - 验证结论：第8步验收通过。
+
+## 危机与灾害触发层（2026-04-27，实施计划第9步）
+- 目标：把“危机值”从只读状态升级为流程驱动量，形成“节点推进累积危机 -> 跨阈值强制触发灾害事件”的可观测闭环。
+- 关键架构洞察：
+  - 继续沿用事件驱动：危机阈值触发只发布统一消息 `CrisisDisasterTriggeredEvent`，不在 `GameContext` 内直接执行灾害结算，避免与后续事件 UI/结算器耦合。
+  - 触发机制采用“基础阈值 + 固定步长”而不是单阈值布尔开关，支持长流程多次触发（如 6、12、18...）并可在 Inspector 调参。
+  - 灾害事件选择采用“优先灾害池、缺失时 fallback 普通事件池”的容错策略，保证测试与开发期不会因数据未配齐而中断流程。
+
+- 文件职责（第9步相关）：
+  - `Assets/Scripts/Core/GameContext.cs`
+    - 新增危机参数：`_crisisGainPerAdvance`、`_disasterTriggerThreshold`、`_disasterTriggerStep`。
+    - 在 `TryCompleteActiveJourneyNode` 内接入“每推进一节点增加危机值”。
+    - 在 `SetResource(ResourceType.Crisis, ...)` 内统一评估阈值跨越并触发灾害消息。
+    - 维护灾害运行时状态：`PendingDisasterEvent`、`PendingDisasterType`、`LastDisasterTriggerMessage`、`NextDisasterTriggerThreshold`。
+  - `Assets/Scripts/Core/GameEventMessages.cs`
+    - 新增 `CrisisDisasterTriggeredEvent`，承载危机值、阈值、触发事件、灾害类型与 fallback 标记。
+  - `Assets/Scripts/Data/ScriptableObjects/GameDataTypes.cs`
+    - 新增 `DisasterEventType` 枚举（`None`、`Plague`、`BanditRaid`、`NaturalDisaster`），统一灾害事件类型语义。
+  - `Assets/Scripts/Data/ScriptableObjects/EventConfig.cs`
+    - 新增 `IsDisasterEvent` 与 `DisasterType` 字段，使事件资产可被标记为灾害候选。
+  - `Assets/Scripts/Core/GameContextDebugPanel.cs`
+    - 新增危机系统摘要区，实时展示危机增长规则、触发阈值、下次触发点与最近一次灾害触发信息。
+    - 订阅 `CrisisDisasterTriggeredEvent`，确保灾害触发后 UI 即时刷新。
+  - `Assets/Scripts/Core/GameContextStep6TestDriver.cs`
+    - 增加第9步验收热键 `V`（将危机值拉到下一个阈值）与 `CrisisDisasterTriggeredEvent` 日志输出。
+    - 调整为 `DontDestroyOnLoad` 单例常驻，避免切场景后测试入口丢失。
+  - `Assets/Scripts/Core/GameContextStep7TestDriver.cs`
+    - 调整为 `DontDestroyOnLoad` 单例常驻，与 Step6 驱动一致，保障 Step8 场景往返时地图调试入口持续可用。
+  - `Assets/Data/TestStep4/EventConfig.asset`
+    - 测试资产增加灾害标记（`IsDisasterEvent=true`，`DisasterType=Plague`），用于第9步最小可验证样本。
+
+- 生命周期与数据流（第9步）：
+  - 完成节点时：`TryCompleteActiveJourneyNode` 扣粮后调用 `AddResource(ResourceType.Crisis, CrisisGainPerAdvance)`。
+  - 危机值写入时：`SetResource` 同步更新 `JourneyState.CrisisValue` 并调用 `EvaluateDisasterTrigger`。
+  - 阈值跨越时：`GameContext` 选择灾害事件并发布 `CrisisDisasterTriggeredEvent`，同时更新 `PendingDisasterEvent` 与调试消息。
+  - 调试观测：`GameContextDebugPanel` 与 Step6 驱动同步接收灾害消息并展示触发结果。
+
+- 边界与后续：
+  - 本层只负责“触发与广播”，不包含灾害事件执行器、卡组污染、战斗分流等结算逻辑（实施计划第23步范围）。
+  - `PendingDisasterEvent` 当前作为“待处理灾害上下文”，后续可由事件场景控制器消费并在结算后清理。
+
+## 第9步验证状态（2026-04-27）
+- 验证环境：Unity 2022.3.62f2c1，`Assets/Scenes/SampleScene.unity` + Step8 占位节点场景。
+- 验证方法：
+  - 推进节点验证危机值按步增长。
+  - 使用 Step6 驱动 `V` 热键将危机值拉高到阈值，观察强制灾害触发日志与调试面板状态。
+  - 进入/返回 Step8 节点场景后复测 Step6/Step7 面板与热键可用性。
+- 验证结果：
+  - 每完成一个节点危机值会增加，满足“每前进一节点增加危机值”。
+  - 危机值跨阈值后会发布 `CrisisDisasterTriggeredEvent`，灾害类型正确出现（示例：`Plague`）。
+  - Step8 场景往返后 Step6/Step7 调试入口持续可用（常驻对象修正生效）。
+  - 验证结论：第9步验收通过。
+
+## 战斗入口层（2026-04-27，实施计划第10步）
+- 目标：把“战斗节点”从纯场景路由升级为“节点配置驱动的战斗遭遇入口”，形成“进入 Battle/Boss 节点 -> 准备敌方队列 -> 载入战斗场景 -> 校验队列一致性”的可观测闭环。
+- 关键架构洞察：
+  - 战斗队列采用“地图生成后预配置 + 进入节点时激活”的双阶段模型，避免在场景切换瞬时随机生成造成不可复现。
+  - 遭遇随机性绑定 `map.Seed + nodeId + nodeType`，保证同一 Run 同一节点可重现，便于回放与定位问题。
+  - 一致性验证采用“运行时校验器 + 事件日志 + 调试面板”三路观测，降低只靠 UI 观察导致的误判。
+
+- 文件职责（第10步相关）：
+  - `Assets/Scripts/Core/GameContext.cs`
+    - 新增敌人池装载与注入：`_startingEnemyPool`、`_enemyPool`、`SetEnemyPool`。
+    - 新增战斗节点配置仓：`_battleNodeEncounterConfigs`，按地图节点预生成 `BattleEncounterConfig`。
+    - 在 `TryEnterNextJourneyNode` 中对 Battle/Boss 节点执行战斗配置存在性校验并激活 `ActiveBattleEncounterConfig`。
+    - 发布 `BattleEncounterPreparedEvent`，并在缺配置时发布阻断原因 `MissingBattleEncounterConfig`。
+  - `Assets/Scripts/Core/BattleEncounterConfig.cs`
+    - 新增战斗入口数据快照：承载节点ID、节点类型、遭遇seed、敌方队列，作为 `GameContext`、调试层、验证器共享契约。
+  - `Assets/Scripts/Core/GameEventMessages.cs`
+    - 新增 `BattleEncounterPreparedEvent` 消息体与 `JourneyAdvanceBlockReason.MissingBattleEncounterConfig`。
+  - `Assets/Scripts/Core/BattleSceneEntryVerifier.cs`
+    - 新增战斗场景入场校验器：监听 `sceneLoaded`，在战斗场景输出“节点配置队列 vs 当前激活队列”的一致性日志。
+  - `Assets/Scripts/Core/GameContextBootstrap.cs`
+    - 启动引导扩展：自动确保 `BattleSceneEntryVerifier` 随 `GameContext` 注入，避免手工挂载遗漏。
+  - `Assets/Scripts/Core/GameContextDebugPanel.cs`
+    - 新增战斗入口摘要区：展示敌人池规模、节点配置队列、激活队列与 `Queue Matches Node Config` 结果。
+  - `Assets/Scripts/Core/GameContextStep8TestDriver.cs`
+    - 接入 `BattleEncounterPreparedEvent` 日志输出，补齐第8步节点交互到第10步战斗入口的桥接观测。
+  - `ProjectSettings/EditorBuildSettings.asset`
+    - 将 `BattleScene`、`EventScene`、`SupplyScene`、`BossScene` 加入 Build Settings，保证节点路由可真实切场景验证。
+
+- 生命周期与数据流（第10步）：
+  - 地图生成阶段：`GameContext.BuildJourneyMap` 后执行 `BuildBattleNodeEncounterConfigs`，为每个 Battle/Boss 节点生成固定敌方队列。
+  - 节点进入阶段：`TryEnterNextJourneyNode` 在 Battle/Boss 路径调用 `TryPrepareBattleEncounter`，激活对应配置并发布 `BattleEncounterPreparedEvent`。
+  - 场景加载阶段：`JourneyNodeSceneRouter` 执行场景切换；`BattleSceneEntryVerifier` 在场景加载回调中比对节点配置与激活队列并输出一致性结果。
+  - 调试观测阶段：`GameContextDebugPanel` 与 Step8 驱动同步刷新，确保场景前后都能看到同一份敌方队列状态。
+
+- 边界与后续：
+  - 本层仅实现“战斗入口配置与加载前校验”，不包含第11步回合系统（能量、抽弃牌、行动顺序）和第12步卡牌效果执行。
+  - 当前敌方队列为节点入口级别配置，不含战斗中 AI 行动序列与动态增援逻辑（后续步骤扩展）。
+
+## 第10步验证状态（2026-04-27）
+- 验证环境：Unity 2022.3.62f2c1，`Assets/Scenes/SampleScene.unity` -> `Assets/Scenes/BattleScene.unity`。
+- 验证方法：
+  - 在旅途中选择 Battle/Boss 节点，触发 `BattleEncounterPreparedEvent`，确认敌方队列已在进入前生成。
+  - 自动切入 `BattleScene` 后观察 `Step10Verifier` 日志中 `nodeConfig` 与 `activeQueue` 对比结果。
+  - 对照调试面板 `Battle Entry` 区块，确认 `Queue Matches Node Config` 为 `True`。
+- 验证结果：
+  - 进入战斗时可稳定输出队列一致性日志，`match=True`。
+  - 节点配置队列与激活队列一致，满足“进入战斗时敌人列表与节点配置一致”的验收标准。
+  - 验证结论：第10步验收通过。
+
+## 回合流程层（2026-04-30，实施计划第11步）
+- 目标：将战斗入口扩展为可运行的回合循环，形成“玩家回合 -> 出牌 -> 弃牌 -> 敌方阶段 -> 下一回合抽牌”的闭环，并保证能量与牌堆计数可观测、可验证。
+- 关键架构洞察：
+  - 回合状态集中在单点控制器（`BattleTurnController`），避免 UI、输入驱动、上下文层各自维护一份回合状态导致分叉。
+  - 抽牌系统采用“抽牌堆空时回洗弃牌堆”的策略，并且每次抽牌前做边界判定，保证不发生下标越界。
+  - 回合推进通过事件总线发布，不把验证逻辑硬编码在控制器里，便于后续替换 UI、接入自动化测试与录像回放。
+- 文件职责（第11步相关）：
+  - `Assets/Scripts/Core/BattleTurnController.cs`
+    - 第11步核心控制器，负责战斗回合生命周期、能量重置、抽牌/弃牌/消耗与回洗、回合阶段切换。
+    - 在进入 `Battle/Boss` 节点时基于 `GameContext.ActiveBattleEncounterConfig` 初始化战斗流；在节点完成或离开战斗节点时结束战斗流。
+    - 对外暴露只读运行时状态（phase/turn/energy/draw/hand/discard/exhaust）供调试面板和测试驱动读取。
+  - `Assets/Scripts/Core/GameEventMessages.cs`
+    - 扩展第11步事件契约与 `BattleTurnPhase` 枚举，作为回合层与 UI/测试层之间的稳定接口。
+  - `Assets/Scripts/Core/GameContextBootstrap.cs`
+    - 启动引导扩展，自动确保 `BattleTurnController` 注入，避免场景切换后因漏挂组件导致回合系统失活。
+  - `Assets/Scripts/Core/GameContextDebugPanel.cs`
+    - 第11步可视化观察层，展示回合阶段、能量、牌堆计数与手牌摘要，用于快速人工验收与问题定位。
+  - `Assets/Scripts/Core/GameContextStep8TestDriver.cs`
+    - 第11步手工回归入口，新增 `P`/`E` 热键与回合事件日志，支持“打牌 -> 结束回合 -> 下一回合”连续验证。
+- 生命周期与数据流（第11步）：
+  - 进入战斗节点后：`GameContext` 准备遭遇配置 -> `BattleTurnController` 初始化牌堆并发布 `BattleFlowInitializedEvent`。
+  - 开始玩家回合：控制器重置能量并抽牌，发布 `BattleCardsDrawnEvent` 与 `BattleTurnStartedEvent`。
+  - 出牌与结束回合：出牌发布 `BattleCardPlayedEvent`；结束回合后依次发布 `BattleHandDiscardedEvent`、`BattleEnemyTurnResolvedEvent`，随后开启下一玩家回合。
+  - 结束战斗流：发布 `BattleFlowEndedEvent` 并清空运行时状态。
+- 边界与后续：
+  - 本层仅负责回合流程骨架与牌堆/能量流转，不负责具体卡牌效果执行（第12步范围）。
+  - 当前敌方阶段为“流程占位 + 事件发布”，敌方意图与具体行动规则在后续步骤实现。
+
+## 卡牌效果框架层（2026-05-11，实施计划第12步）
+- 目标：将第11步“可出牌但仅消耗资源”的回合骨架扩展为“按牌类型执行可观测效果”的战斗能力，形成“出牌 -> 执行效果 -> 状态变化 -> 事件广播”的闭环，并支持状态叠层验证。
+- 关键架构洞察：
+  - 将“单位状态”从控制器临时变量抽离到独立模型 `BattleCombatantState`，把生命/护甲/状态叠层逻辑集中，避免后续敌方 AI、遗物、DOT 结算重复实现。
+  - 出牌事件继续沿用事件总线，但载荷升级为“意图 + 结果”双信息结构（卡牌原始参数 + 实际效果数值），使 UI、日志、自动化验证不需窥探控制器内部状态。
+  - 牌类型映射先采用稳定规则（Attack/Defense/Strategy/Logistics/Tactic），保持可迭代的最小实现：先保证语义可验，再逐步扩展复杂特效脚本化。
+
+- 文件职责（第12步相关）：
+  - `Assets/Scripts/Core/BattleCombatantState.cs`
+    - 运行时单位状态对象（玩家/敌人共用）：管理 `CurrentHealth`、`Armor`、状态栈字典与 `ApplyDamage`/`AddArmor`/`Heal`/`AddStatus`。
+    - 提供 `GetStatusSummary()` 作为调试输出的统一来源，减少面板/日志重复拼接状态字符串。
+  - `Assets/Scripts/Core/BattleTurnController.cs`
+    - 新增 `_playerState`、`_enemyStates` 与初始化逻辑，在进入战斗节点后构建战斗快照。
+    - 在 `TryPlayCard` 中调用 `ExecuteCardEffect` 执行 5 类卡效：
+      - `Attack`：对首个存活敌人造成伤害并附加状态。
+      - `Defense`：为玩家增加护甲并附加状态。
+      - `Strategy`：额外抽牌，并可附加玩家状态。
+      - `Logistics`：为玩家治疗并附加状态。
+      - `Tactic`：对首个目标造成伤害，并对所有存活敌人叠加状态。
+    - 持有 `LastCardEffectSummary`，作为调试面板“最近一次效果”文本源。
+  - `Assets/Scripts/Core/GameEventMessages.cs`
+    - 扩展 `BattleCardPlayedEvent`：新增 `CardType`、`CardBaseValue`、`StatusEffect`、`RequestedStatusStacks` 与实际结果字段（伤害/护甲/治疗/抽牌/状态叠层/摘要）。
+    - 作用：让外部观测层可直接判定“描述是否生效”，无需访问控制器私有字段。
+  - `Assets/Scripts/Core/GameContextDebugPanel.cs`
+    - 新增战斗效果观测区：玩家 HP/护甲/状态、敌方逐单位状态、最后一次卡效摘要。
+    - 作用：第12步手工验收主界面，便于快速核对“数值变化 + 状态叠层”。
+  - `Assets/Scripts/Core/GameContextStep8TestDriver.cs`
+    - 扩展出牌日志，输出卡效结果明细（dmg/armor/heal/draw/status + summary）。
+    - 作用：与面板互补，提供可复制的 Console 验收证据。
+  - `Assets/Data/TestStep4/CardConfig.asset`
+    - Step12 攻击示例牌（破甲斩）：用于验证伤害 + 流血叠层。
+  - `Assets/Data/TestStep4/CardConfig_Defense.asset`
+    - Step12 防御示例牌（坚守阵线）：用于验证护甲 + 士气叠层。
+  - `Assets/Data/TestStep4/CardConfig_Strategy.asset`
+    - Step12 策略示例牌（侦察预案）：用于验证额外抽牌。
+  - `Assets/Data/TestStep4/CardConfig_Logistics.asset`
+    - Step12 后勤示例牌（战地医护）：用于验证治疗 + 士气叠层。
+  - `Assets/Data/TestStep4/CardConfig_Tactic.asset`
+    - Step12 战术示例牌（包围网）：用于验证单体伤害 + 群体围捕叠层。
+
+- 生命周期与数据流（第12步）：
+  - 进入 Battle/Boss 节点后，`BattleTurnController` 初始化玩家与敌方状态。
+  - 玩家出牌时：
+    - 先完成能量消耗与手牌迁移（弃牌/消耗堆）。
+    - 再执行 `ExecuteCardEffect` 写入单位状态（HP/Armor/Status）与抽牌变化。
+    - 最后发布扩展后的 `BattleCardPlayedEvent`，调试面板与测试驱动即时刷新。
+  - 回合结束与下回合开始保持第11步流程不变（弃牌 -> 敌方阶段占位 -> 回合开始抽牌）。
+
+- 边界与后续：
+  - 本层仅实现“卡牌类型 -> 基础效果映射”，未引入卡牌脚本化 DSL、触发连锁、遗物联动与持续伤害结算。
+  - 第13步敌人 AI 意图系统尚未开始；当前敌方仍为回合占位与状态承载。
+
+## 第12步验证状态（2026-05-11）
+- 验证环境：Unity 2022.3.62f2c1，`Assets/Scenes/SampleScene.unity` + `BattleScene.unity`。
+- 验证方法：通过 `GameContextStep8TestDriver` 进入战斗节点，循环出牌并观察 `GameContextDebugPanel` 与 Console 事件日志。
+- 验证结果：
+  - 5 张示例牌均按描述生效（攻击、防御、策略抽牌、后勤治疗、战术群体状态）。
+  - 状态可叠层（示例：`Bleed` 可连续增长）。
+  - `BattleCardPlayedEvent` 明细与面板状态一致，可用于后续自动化断言。
+- 验证结论：第12步验收通过；按约束未开始第13步。
+
+## 敌人意图与执行层（2026-05-13，实施计划第13步）
+- 目标：把敌方阶段从“占位流程”升级为“可预览意图 + 可执行行动”的闭环，形成“回合开始发布下回合意图 -> 玩家决策 -> 敌方按意图执行 -> 输出执行结果摘要”的可观测链路。
+- 关键架构洞察：
+  - 引入“计划值（planned）”与“实际生效值（effective）”双层语义：
+    - planned：`BattleEnemyIntentUpdatedEvent` 中的 `IntentType + IntentValue`，用于 UI 预览。
+    - effective：`BattleEnemyTurnResolvedEvent` 中的伤害/护甲/掠夺结果，受护甲吸收、资源上限、单位存活等运行时条件影响。
+  - 验收与调试必须按同一 `turn` 对齐比较“类型一致性”和“结果合理性（effective <= planned）”，而不是要求数值逐项恒等。
+  - 保持 `BattleTurnController` 单点控制：意图生成与执行均在同一控制器，避免 UI 层和控制层维护两套敌方行为状态导致漂移。
+
+- 文件职责（第13步相关）：
+  - `Assets/Scripts/Core/BattleTurnController.cs`
+    - 新增意图计划缓存：`_enemyIntents`，并在 `BeginPlayerTurn` 中调用 `RebuildEnemyIntentPlan()`。
+    - 新增敌方执行链路：`ResolveEnemyTurn()`，按意图执行 `Attack/Defend/Plunder`。
+    - 新增资源掠夺策略：`TryPlunderResources()`（优先 `Wealth`，不足补扣 `Food`）。
+    - 新增观测字段：`EnemyIntents`、`LastEnemyTurnSummary`。
+  - `Assets/Scripts/Core/GameEventMessages.cs`
+    - 新增 `BattleEnemyIntentView`（敌方意图快照结构）。
+    - 新增 `BattleEnemyIntentUpdatedEvent`（按回合广播意图列表）。
+    - 扩展 `BattleEnemyTurnResolvedEvent`，承载敌方回合实际执行聚合结果与摘要。
+  - `Assets/Scripts/Core/GameContextDebugPanel.cs`
+    - 新增调试展示：`Next Enemy Intents`、`Last Enemy Turn`。
+    - 订阅 `BattleEnemyIntentUpdatedEvent`，确保回合意图刷新时面板即时同步。
+  - `Assets/Scripts/Core/GameContextStep8TestDriver.cs`
+    - 新增第13步日志观测入口：输出意图刷新事件和敌方回合执行结果，供人工验收与回归记录。
+
+- 生命周期与数据流（第13步）：
+  - 玩家回合开始：`BattleTurnController.BeginPlayerTurn()` 先生成下一次敌方行动计划并发布 `BattleEnemyIntentUpdatedEvent`，再执行玩家抽牌/能量重置。
+  - 玩家结束回合：`TryEndPlayerTurn()` 将阶段切换到 `EnemyTurn`，调用 `ResolveEnemyTurn()` 执行已发布的意图计划。
+  - 敌方执行后：发布扩展后的 `BattleEnemyTurnResolvedEvent`（dmg/armor/plunder + summary），随后开启下一玩家回合并刷新新一轮意图。
+
+- 边界与后续：
+  - 本层仅实现基础三意图（攻击/防御/掠夺）及可读提示，不包含复杂技能脚本、多段连携、遗物联动和敌方战术树。
+  - 第14步战斗结算（胜负奖励/惩罚、伙伴受伤）仍未开始，保持阶段边界清晰。
+
+## 第13步验证状态（2026-05-13）
+- 验证环境：Unity 2022.3.62f2c1，`Assets/Scenes/SampleScene.unity` + `BattleScene.unity`。
+- 验证方法：通过 `GameContextStep8TestDriver` 持续结束玩家回合，观察 `EnemyIntentUpdated` 与 `EnemyTurnResolved` 的同回合对齐关系，以及调试面板实时刷新。
+- 验证结果：
+  - 回合编号持续增长且意图事件持续刷新。
+  - `EnemyTurnResolved` 与对应回合意图在“行动类型”上保持一致。
+  - 观察到 planned 与 effective 数值可不同（如伤害被护甲吸收、掠夺受资源余量限制），符合第13步语义定义。
+  - 验证结论：第13步验收通过。

@@ -46,6 +46,14 @@ namespace OneManJourney.Data
         SacrificeCard
     }
 
+    public enum DisasterEventType
+    {
+        None,
+        Plague,
+        BanditRaid,
+        NaturalDisaster
+    }
+
     public enum CompanionRole
     {
         Damage,

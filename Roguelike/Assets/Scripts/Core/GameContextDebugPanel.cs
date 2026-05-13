@@ -13,6 +13,7 @@ namespace OneManJourney.Runtime
     {
         private readonly StringBuilder _builder = new StringBuilder(512);
         private GameContext _context;
+        private BattleTurnController _battleTurnController;
         private GameEventBus _eventBus;
         private IDisposable _resourceChangedSubscription;
         private IDisposable _nodeSelectedSubscription;
@@ -22,6 +23,16 @@ namespace OneManJourney.Runtime
         private IDisposable _journeyNodeEnteredSubscription;
         private IDisposable _journeyNodeCompletedSubscription;
         private IDisposable _journeyAdvanceBlockedSubscription;
+        private IDisposable _crisisDisasterTriggeredSubscription;
+        private IDisposable _battleEncounterPreparedSubscription;
+        private IDisposable _battleFlowInitializedSubscription;
+        private IDisposable _battleEnemyIntentUpdatedSubscription;
+        private IDisposable _battleTurnStartedSubscription;
+        private IDisposable _battleCardPlayedSubscription;
+        private IDisposable _battleHandDiscardedSubscription;
+        private IDisposable _battleEnemyTurnResolvedSubscription;
+        private IDisposable _battleCardsDrawnSubscription;
+        private IDisposable _battleFlowEndedSubscription;
         private TextMeshProUGUI _text;
 
         private void Awake()
@@ -46,6 +57,11 @@ namespace OneManJourney.Runtime
         {
             bool didBind = false;
             if (_context == null && TryBindContext())
+            {
+                didBind = true;
+            }
+
+            if (_battleTurnController == null && TryBindBattleTurnController())
             {
                 didBind = true;
             }
@@ -92,6 +108,7 @@ namespace OneManJourney.Runtime
 
             _context.Initialized += HandleContextStateChanged;
             _context.StateChanged += HandleContextStateChanged;
+            TryBindBattleTurnController();
             TryBindEventBus();
             return true;
         }
@@ -105,12 +122,40 @@ namespace OneManJourney.Runtime
                 _context = null;
             }
 
+            _battleTurnController = null;
+
             UnbindEventBus();
         }
 
         private void HandleContextStateChanged()
         {
             Refresh();
+        }
+
+        private bool TryBindBattleTurnController()
+        {
+            BattleTurnController nextController = null;
+            if (_context != null)
+            {
+                nextController = _context.GetComponent<BattleTurnController>();
+            }
+
+            if (nextController == null && GameServices.TryResolve(out BattleTurnController resolved))
+            {
+                nextController = resolved;
+            }
+
+            if (nextController == null)
+            {
+                BattleTurnController[] controllers = Resources.FindObjectsOfTypeAll<BattleTurnController>();
+                if (controllers != null && controllers.Length > 0)
+                {
+                    nextController = controllers[0];
+                }
+            }
+
+            _battleTurnController = nextController;
+            return _battleTurnController != null;
         }
 
         private bool TryBindEventBus()
@@ -146,6 +191,16 @@ namespace OneManJourney.Runtime
             _journeyNodeEnteredSubscription = _eventBus.Subscribe<JourneyNodeEnteredEvent>(HandleJourneyNodeEntered);
             _journeyNodeCompletedSubscription = _eventBus.Subscribe<JourneyNodeCompletedEvent>(HandleJourneyNodeCompleted);
             _journeyAdvanceBlockedSubscription = _eventBus.Subscribe<JourneyAdvanceBlockedEvent>(HandleJourneyAdvanceBlocked);
+            _crisisDisasterTriggeredSubscription = _eventBus.Subscribe<CrisisDisasterTriggeredEvent>(HandleCrisisDisasterTriggered);
+            _battleEncounterPreparedSubscription = _eventBus.Subscribe<BattleEncounterPreparedEvent>(HandleBattleEncounterPrepared);
+            _battleFlowInitializedSubscription = _eventBus.Subscribe<BattleFlowInitializedEvent>(HandleBattleFlowInitialized);
+            _battleEnemyIntentUpdatedSubscription = _eventBus.Subscribe<BattleEnemyIntentUpdatedEvent>(HandleBattleEnemyIntentUpdated);
+            _battleTurnStartedSubscription = _eventBus.Subscribe<BattleTurnStartedEvent>(HandleBattleTurnStarted);
+            _battleCardPlayedSubscription = _eventBus.Subscribe<BattleCardPlayedEvent>(HandleBattleCardPlayed);
+            _battleHandDiscardedSubscription = _eventBus.Subscribe<BattleHandDiscardedEvent>(HandleBattleHandDiscarded);
+            _battleEnemyTurnResolvedSubscription = _eventBus.Subscribe<BattleEnemyTurnResolvedEvent>(HandleBattleEnemyTurnResolved);
+            _battleCardsDrawnSubscription = _eventBus.Subscribe<BattleCardsDrawnEvent>(HandleBattleCardsDrawn);
+            _battleFlowEndedSubscription = _eventBus.Subscribe<BattleFlowEndedEvent>(HandleBattleFlowEnded);
             return true;
         }
 
@@ -159,6 +214,16 @@ namespace OneManJourney.Runtime
             _journeyNodeEnteredSubscription?.Dispose();
             _journeyNodeCompletedSubscription?.Dispose();
             _journeyAdvanceBlockedSubscription?.Dispose();
+            _crisisDisasterTriggeredSubscription?.Dispose();
+            _battleEncounterPreparedSubscription?.Dispose();
+            _battleFlowInitializedSubscription?.Dispose();
+            _battleEnemyIntentUpdatedSubscription?.Dispose();
+            _battleTurnStartedSubscription?.Dispose();
+            _battleCardPlayedSubscription?.Dispose();
+            _battleHandDiscardedSubscription?.Dispose();
+            _battleEnemyTurnResolvedSubscription?.Dispose();
+            _battleCardsDrawnSubscription?.Dispose();
+            _battleFlowEndedSubscription?.Dispose();
 
             _resourceChangedSubscription = null;
             _nodeSelectedSubscription = null;
@@ -168,6 +233,16 @@ namespace OneManJourney.Runtime
             _journeyNodeEnteredSubscription = null;
             _journeyNodeCompletedSubscription = null;
             _journeyAdvanceBlockedSubscription = null;
+            _crisisDisasterTriggeredSubscription = null;
+            _battleEncounterPreparedSubscription = null;
+            _battleFlowInitializedSubscription = null;
+            _battleEnemyIntentUpdatedSubscription = null;
+            _battleTurnStartedSubscription = null;
+            _battleCardPlayedSubscription = null;
+            _battleHandDiscardedSubscription = null;
+            _battleEnemyTurnResolvedSubscription = null;
+            _battleCardsDrawnSubscription = null;
+            _battleFlowEndedSubscription = null;
             _eventBus = null;
         }
 
@@ -207,6 +282,56 @@ namespace OneManJourney.Runtime
         }
 
         private void HandleJourneyAdvanceBlocked(JourneyAdvanceBlockedEvent _)
+        {
+            Refresh();
+        }
+
+        private void HandleCrisisDisasterTriggered(CrisisDisasterTriggeredEvent _)
+        {
+            Refresh();
+        }
+
+        private void HandleBattleEncounterPrepared(BattleEncounterPreparedEvent _)
+        {
+            Refresh();
+        }
+
+        private void HandleBattleFlowInitialized(BattleFlowInitializedEvent _)
+        {
+            Refresh();
+        }
+
+        private void HandleBattleTurnStarted(BattleTurnStartedEvent _)
+        {
+            Refresh();
+        }
+
+        private void HandleBattleEnemyIntentUpdated(BattleEnemyIntentUpdatedEvent _)
+        {
+            Refresh();
+        }
+
+        private void HandleBattleCardPlayed(BattleCardPlayedEvent _)
+        {
+            Refresh();
+        }
+
+        private void HandleBattleHandDiscarded(BattleHandDiscardedEvent _)
+        {
+            Refresh();
+        }
+
+        private void HandleBattleEnemyTurnResolved(BattleEnemyTurnResolvedEvent _)
+        {
+            Refresh();
+        }
+
+        private void HandleBattleCardsDrawn(BattleCardsDrawnEvent _)
+        {
+            Refresh();
+        }
+
+        private void HandleBattleFlowEnded(BattleFlowEndedEvent _)
         {
             Refresh();
         }
@@ -292,6 +417,11 @@ namespace OneManJourney.Runtime
                 return;
             }
 
+            if (_battleTurnController == null)
+            {
+                TryBindBattleTurnController();
+            }
+
             JourneyState state = _context.JourneyState;
             _builder.AppendLine($"Chapter: {state.Chapter}");
             _builder.AppendLine($"Node Index: {state.NodeIndex}");
@@ -300,8 +430,12 @@ namespace OneManJourney.Runtime
             _builder.AppendLine($"Crisis: {state.CrisisValue}");
             _builder.AppendLine($"Card Pool: {_context.CardPool.Count}");
             _builder.AppendLine($"Event Pool: {_context.EventPool.Count}");
+            _builder.AppendLine($"Enemy Pool: {_context.EnemyPool.Count}");
+            AppendCrisisSummary(_context);
             AppendJourneyMapSummary(_context.JourneyMap);
             AppendJourneyProgressSummary(_context);
+            AppendBattleEntrySummary(_context);
+            AppendBattleTurnSummary();
             _builder.AppendLine();
             _builder.AppendLine("Resources:");
 
@@ -375,6 +509,201 @@ namespace OneManJourney.Runtime
                 JourneyMapNode node = nextNodes[i];
                 _builder.AppendLine($"  - #{node.Id} ({node.NodeType})");
             }
+        }
+
+        private void AppendBattleTurnSummary()
+        {
+            _builder.AppendLine();
+            _builder.AppendLine("Battle Turn:");
+
+            if (_battleTurnController == null)
+            {
+                _builder.AppendLine("- Controller: not found");
+                return;
+            }
+
+            if (!_battleTurnController.IsActive)
+            {
+                _builder.AppendLine("- Active: No");
+                return;
+            }
+
+            _builder.AppendLine($"- Active: Yes (Node {_battleTurnController.ActiveNodeId}, {_battleTurnController.ActiveNodeType})");
+            _builder.AppendLine($"- Phase: {_battleTurnController.Phase}");
+            _builder.AppendLine($"- Turn: {_battleTurnController.TurnNumber}");
+            _builder.AppendLine($"- Energy: {_battleTurnController.CurrentEnergy}/{_battleTurnController.MaxEnergyPerTurn}");
+            _builder.AppendLine($"- Player HP/Armor: {_battleTurnController.PlayerCurrentHealth}/{_battleTurnController.PlayerMaxHealth} | {_battleTurnController.PlayerArmor}");
+            _builder.AppendLine($"- Player Status: {_battleTurnController.PlayerStatusSummary}");
+            _builder.AppendLine($"- Enemy Count: {_battleTurnController.EnemyQueue.Count}");
+            _builder.AppendLine($"- Draw/Hand/Discard/Exhaust: {_battleTurnController.DrawPile.Count}/{_battleTurnController.Hand.Count}/{_battleTurnController.DiscardPile.Count}/{_battleTurnController.ExhaustPile.Count}");
+            _builder.AppendLine($"- Last Effect: {_battleTurnController.LastCardEffectSummary}");
+            _builder.AppendLine($"- Last Enemy Turn: {_battleTurnController.LastEnemyTurnSummary}");
+
+            if (_battleTurnController.EnemyStates.Count > 0)
+            {
+                _builder.AppendLine("- Enemies:");
+                for (int index = 0; index < _battleTurnController.EnemyStates.Count; index++)
+                {
+                    BattleCombatantState enemyState = _battleTurnController.EnemyStates[index];
+                    if (enemyState == null)
+                    {
+                        _builder.AppendLine($"  - [{index}] null");
+                        continue;
+                    }
+
+                    string defeatedLabel = enemyState.IsDefeated ? "Defeated" : "Alive";
+                    _builder.AppendLine(
+                        $"  - [{index}] {enemyState.DisplayName} {defeatedLabel} " +
+                        $"HP {enemyState.CurrentHealth}/{enemyState.MaxHealth}, Armor {enemyState.Armor}, Status {enemyState.GetStatusSummary()}");
+                }
+            }
+
+            if (_battleTurnController.EnemyIntents.Count > 0)
+            {
+                _builder.AppendLine("- Next Enemy Intents:");
+                for (int index = 0; index < _battleTurnController.EnemyIntents.Count; index++)
+                {
+                    BattleEnemyIntentView intent = _battleTurnController.EnemyIntents[index];
+                    _builder.AppendLine($"  - [{intent.EnemyIndex}] {intent.EnemyDisplayName}: {intent.IntentType} {intent.IntentValue} {(intent.IsDefeated ? "(defeated)" : string.Empty)}");
+                }
+            }
+
+            if (_battleTurnController.Hand.Count == 0)
+            {
+                _builder.AppendLine("- Hand: empty");
+                return;
+            }
+
+            _builder.AppendLine("- Hand (first 5):");
+            int limit = Mathf.Min(5, _battleTurnController.Hand.Count);
+            for (int index = 0; index < limit; index++)
+            {
+                CardConfig card = _battleTurnController.Hand[index];
+                if (card == null)
+                {
+                    _builder.AppendLine("  - null");
+                    continue;
+                }
+
+                _builder.AppendLine($"  - {card.DisplayName} ({card.EnergyCost})");
+            }
+        }
+
+        private void AppendCrisisSummary(GameContext context)
+        {
+            _builder.AppendLine();
+            _builder.AppendLine("Crisis System:");
+            _builder.AppendLine($"- Gain / Advance: {context.CrisisGainPerAdvance}");
+            _builder.AppendLine($"- Trigger Threshold: {context.DisasterTriggerThreshold}");
+            _builder.AppendLine($"- Trigger Step: {context.DisasterTriggerStep}");
+            _builder.AppendLine($"- Next Trigger At: {context.NextDisasterTriggerThreshold}");
+
+            if (context.PendingDisasterEvent == null)
+            {
+                _builder.AppendLine("- Pending Disaster: None");
+            }
+            else
+            {
+                _builder.AppendLine($"- Pending Disaster: {context.PendingDisasterEvent.DisplayName} ({context.PendingDisasterType})");
+            }
+
+            if (!string.IsNullOrWhiteSpace(context.LastDisasterTriggerMessage))
+            {
+                _builder.AppendLine($"- Last Trigger: {context.LastDisasterTriggerMessage}");
+            }
+        }
+
+        private void AppendBattleEntrySummary(GameContext context)
+        {
+            _builder.AppendLine();
+            _builder.AppendLine("Battle Entry:");
+
+            if (!context.HasActiveJourneyEncounter)
+            {
+                _builder.AppendLine("- Active Encounter: None");
+                return;
+            }
+
+            if (context.ActiveJourneyNodeType != JourneyNodeType.Battle
+                && context.ActiveJourneyNodeType != JourneyNodeType.Boss)
+            {
+                _builder.AppendLine("- Active Encounter: Non-battle node");
+                return;
+            }
+
+            _builder.AppendLine($"- Active Node: {context.ActiveJourneyNodeId} ({context.ActiveJourneyNodeType})");
+
+            if (context.TryGetBattleNodeEncounterConfig(context.ActiveJourneyNodeId, out BattleEncounterConfig nodeConfig))
+            {
+                _builder.AppendLine($"- Node Config Seed: {nodeConfig.EncounterSeed}");
+                _builder.AppendLine($"- Node Config Queue: {FormatEnemyQueue(nodeConfig.EnemyQueue)}");
+            }
+            else
+            {
+                _builder.AppendLine("- Node Config: Missing");
+            }
+
+            if (context.ActiveBattleEncounterConfig == null)
+            {
+                _builder.AppendLine("- Active Queue: Missing");
+                return;
+            }
+
+            BattleEncounterConfig activeConfig = context.ActiveBattleEncounterConfig;
+            _builder.AppendLine($"- Active Queue Seed: {activeConfig.EncounterSeed}");
+            _builder.AppendLine($"- Active Queue: {FormatEnemyQueue(activeConfig.EnemyQueue)}");
+            bool matches = context.TryGetBattleNodeEncounterConfig(activeConfig.NodeId, out BattleEncounterConfig expected)
+                && HasSameEnemyQueue(expected.EnemyQueue, activeConfig.EnemyQueue);
+            _builder.AppendLine($"- Queue Matches Node Config: {matches}");
+        }
+
+        private static string FormatEnemyQueue(IReadOnlyList<EnemyConfig> queue)
+        {
+            if (queue == null || queue.Count == 0)
+            {
+                return "none";
+            }
+
+            var builder = new StringBuilder();
+            for (int index = 0; index < queue.Count; index++)
+            {
+                if (index > 0)
+                {
+                    builder.Append(", ");
+                }
+
+                EnemyConfig enemy = queue[index];
+                if (enemy == null)
+                {
+                    builder.Append("null");
+                    continue;
+                }
+
+                builder.Append(enemy.DisplayName);
+                builder.Append(" (");
+                builder.Append(enemy.Id);
+                builder.Append(')');
+            }
+
+            return builder.ToString();
+        }
+
+        private static bool HasSameEnemyQueue(IReadOnlyList<EnemyConfig> left, IReadOnlyList<EnemyConfig> right)
+        {
+            if (left == null || right == null || left.Count != right.Count)
+            {
+                return false;
+            }
+
+            for (int index = 0; index < left.Count; index++)
+            {
+                if (left[index] != right[index])
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private void AppendJourneyMapSummary(JourneyMap journeyMap)

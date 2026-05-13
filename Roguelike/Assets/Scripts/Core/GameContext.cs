@@ -15,9 +15,19 @@ namespace OneManJourney.Runtime
         [SerializeField] private ResourceTableConfig _resourceTable;
         [SerializeField] private List<CardConfig> _startingCardPool = new List<CardConfig>();
         [SerializeField] private List<EventConfig> _startingEventPool = new List<EventConfig>();
+        [SerializeField] private List<EnemyConfig> _startingEnemyPool = new List<EnemyConfig>();
         [SerializeField] private bool _autoLoadEditorData = true;
         [Header("Journey Map")]
         [SerializeField] private JourneyMapGenerationConfig _journeyMapGenerationConfig = new JourneyMapGenerationConfig();
+        [Header("Battle Entry")]
+        [Min(1)]
+        [SerializeField] private int _battleEnemyCountMin = 1;
+        [Min(1)]
+        [SerializeField] private int _battleEnemyCountMax = 3;
+        [Min(1)]
+        [SerializeField] private int _bossEnemyCountMin = 2;
+        [Min(1)]
+        [SerializeField] private int _bossEnemyCountMax = 4;
         [Header("Journey Progress")]
         [Min(1)]
         [SerializeField] private int _foodCostPerAdvance = 1;
@@ -25,10 +35,19 @@ namespace OneManJourney.Runtime
         [SerializeField] private string _eventSceneName = "EventScene";
         [SerializeField] private string _supplySceneName = "SupplyScene";
         [SerializeField] private string _bossSceneName = "BossScene";
+        [Header("Crisis")]
+        [Min(0)]
+        [SerializeField] private int _crisisGainPerAdvance = 1;
+        [Min(1)]
+        [SerializeField] private int _disasterTriggerThreshold = 6;
+        [Min(1)]
+        [SerializeField] private int _disasterTriggerStep = 6;
 
         private readonly Dictionary<ResourceType, int> _resources = new Dictionary<ResourceType, int>();
         private readonly List<CardConfig> _cardPool = new List<CardConfig>();
         private readonly List<EventConfig> _eventPool = new List<EventConfig>();
+        private readonly List<EnemyConfig> _enemyPool = new List<EnemyConfig>();
+        private readonly Dictionary<int, BattleEncounterConfig> _battleNodeEncounterConfigs = new Dictionary<int, BattleEncounterConfig>();
         private GameEventBus _eventBus;
         private JourneyMap _journeyMap;
         private bool _isInitialized;
@@ -36,6 +55,11 @@ namespace OneManJourney.Runtime
         private JourneyNodeType _activeJourneyNodeType = JourneyNodeType.Battle;
         private string _activeJourneySceneName = string.Empty;
         private string _lastJourneyAdvanceBlockMessage = string.Empty;
+        private EventConfig _pendingDisasterEvent;
+        private DisasterEventType _pendingDisasterType = DisasterEventType.None;
+        private string _lastDisasterTriggerMessage = string.Empty;
+        private int _nextDisasterTriggerThreshold;
+        private BattleEncounterConfig _activeBattleEncounterConfig;
 
         public static GameContext Instance { get; private set; }
 
@@ -46,6 +70,7 @@ namespace OneManJourney.Runtime
         public IReadOnlyDictionary<ResourceType, int> Resources => _resources;
         public IReadOnlyList<CardConfig> CardPool => _cardPool;
         public IReadOnlyList<EventConfig> EventPool => _eventPool;
+        public IReadOnlyList<EnemyConfig> EnemyPool => _enemyPool;
         public GameEventBus EventBus => _eventBus;
         public JourneyMap JourneyMap => _journeyMap;
         public int FoodCostPerAdvance => Mathf.Max(1, _foodCostPerAdvance);
@@ -54,6 +79,14 @@ namespace OneManJourney.Runtime
         public JourneyNodeType ActiveJourneyNodeType => _activeJourneyNodeType;
         public string ActiveJourneySceneName => _activeJourneySceneName;
         public string LastJourneyAdvanceBlockMessage => _lastJourneyAdvanceBlockMessage;
+        public int CrisisGainPerAdvance => Mathf.Max(0, _crisisGainPerAdvance);
+        public int DisasterTriggerThreshold => Mathf.Max(1, _disasterTriggerThreshold);
+        public int DisasterTriggerStep => Mathf.Max(1, _disasterTriggerStep);
+        public int NextDisasterTriggerThreshold => _nextDisasterTriggerThreshold <= 0 ? DisasterTriggerThreshold : _nextDisasterTriggerThreshold;
+        public EventConfig PendingDisasterEvent => _pendingDisasterEvent;
+        public DisasterEventType PendingDisasterType => _pendingDisasterType;
+        public string LastDisasterTriggerMessage => _lastDisasterTriggerMessage;
+        public BattleEncounterConfig ActiveBattleEncounterConfig => _activeBattleEncounterConfig;
         // Avoid Unity API calls during MonoBehaviour construction/field initialization.
         public JourneyState JourneyState { get; private set; } = new JourneyState();
 
@@ -103,6 +136,7 @@ namespace OneManJourney.Runtime
             BuildJourneyMap(JourneyState.RunSeed);
             ResetJourneyEncounterState();
             ClearJourneyAdvanceBlockMessage();
+            ResetDisasterState();
 
             _isInitialized = true;
             Initialized?.Invoke();
@@ -130,17 +164,17 @@ namespace OneManJourney.Runtime
                 amount = 0;
             }
 
-            if (type == ResourceType.Crisis)
-            {
-                JourneyState.CrisisValue = amount;
-            }
-
             if (previousAmount == amount)
             {
                 return;
             }
 
             _resources[type] = amount;
+            if (type == ResourceType.Crisis)
+            {
+                JourneyState.CrisisValue = amount;
+                EvaluateDisasterTrigger(previousAmount, amount);
+            }
 
             Publish(new ResourceChangedEvent(type, previousAmount, amount));
             NotifyStateChanged();
@@ -208,6 +242,11 @@ namespace OneManJourney.Runtime
         public bool TryGetCurrentJourneyNode(out JourneyMapNode node)
         {
             return TryGetJourneyNode(JourneyState.NodeIndex, out node);
+        }
+
+        public bool TryGetBattleNodeEncounterConfig(int nodeId, out BattleEncounterConfig encounterConfig)
+        {
+            return _battleNodeEncounterConfigs.TryGetValue(nodeId, out encounterConfig);
         }
 
         public IReadOnlyList<JourneyMapNode> GetAvailableNextJourneyNodes()
@@ -291,6 +330,18 @@ namespace OneManJourney.Runtime
                     out blockMessage);
             }
 
+            if (targetNode.NodeType == JourneyNodeType.Battle || targetNode.NodeType == JourneyNodeType.Boss)
+            {
+                if (!TryPrepareBattleEncounter(targetNode, out blockMessage))
+                {
+                    return false;
+                }
+            }
+            else
+            {
+                _activeBattleEncounterConfig = null;
+            }
+
             _activeJourneyNodeId = targetNode.Id;
             _activeJourneyNodeType = targetNode.NodeType;
             _activeJourneySceneName = ResolveJourneySceneName(targetNode.NodeType);
@@ -329,6 +380,10 @@ namespace OneManJourney.Runtime
 
             AddResource(ResourceType.Food, -foodCost);
             int foodAfter = GetResource(ResourceType.Food);
+            if (CrisisGainPerAdvance > 0)
+            {
+                AddResource(ResourceType.Crisis, CrisisGainPerAdvance);
+            }
 
             ResetJourneyEncounterState();
             Publish(new JourneyNodeCompletedEvent(completedNodeId, completedNodeType, foodCost, foodBefore, foodAfter));
@@ -380,6 +435,15 @@ namespace OneManJourney.Runtime
         {
             _eventPool.Clear();
             AddUniqueConfigs(_eventPool, events);
+            ResetDisasterState();
+            NotifyStateChanged();
+        }
+
+        public void SetEnemyPool(IEnumerable<EnemyConfig> enemies)
+        {
+            _enemyPool.Clear();
+            AddUniqueConfigs(_enemyPool, enemies);
+            BuildBattleNodeEncounterConfigs();
             NotifyStateChanged();
         }
 
@@ -395,6 +459,7 @@ namespace OneManJourney.Runtime
             JourneyState.NodeIndex = 0;
             ResetJourneyEncounterState();
             ClearJourneyAdvanceBlockMessage();
+            ResetDisasterState();
             Publish(new JourneyMapGeneratedEvent(_journeyMap));
             NotifyStateChanged();
         }
@@ -428,9 +493,11 @@ namespace OneManJourney.Runtime
         {
             _cardPool.Clear();
             _eventPool.Clear();
+            _enemyPool.Clear();
 
             AddUniqueConfigs(_cardPool, _startingCardPool);
             AddUniqueConfigs(_eventPool, _startingEventPool);
+            AddUniqueConfigs(_enemyPool, _startingEnemyPool);
         }
 
         private static void AddUniqueConfigs<T>(List<T> target, IEnumerable<T> source) where T : class
@@ -464,6 +531,7 @@ namespace OneManJourney.Runtime
         private void BuildJourneyMap(int seed)
         {
             _journeyMap = JourneyMapGenerator.Generate(seed, _journeyMapGenerationConfig);
+            BuildBattleNodeEncounterConfigs();
         }
 
         private string ResolveJourneySceneName(JourneyNodeType nodeType)
@@ -476,6 +544,79 @@ namespace OneManJourney.Runtime
                 JourneyNodeType.Boss => _bossSceneName,
                 _ => string.Empty
             };
+        }
+
+        private bool TryPrepareBattleEncounter(JourneyMapNode targetNode, out string blockMessage)
+        {
+            if (!_battleNodeEncounterConfigs.TryGetValue(targetNode.Id, out BattleEncounterConfig encounterConfig))
+            {
+                return BlockJourneyAdvance(
+                    JourneyAdvanceBlockReason.MissingBattleEncounterConfig,
+                    $"Battle encounter config is missing for node {targetNode.Id}.",
+                    out blockMessage);
+            }
+
+            _activeBattleEncounterConfig = encounterConfig;
+            Publish(new BattleEncounterPreparedEvent(
+                encounterConfig.NodeId,
+                encounterConfig.NodeType,
+                encounterConfig.EncounterSeed,
+                encounterConfig.EnemyQueue));
+            blockMessage = string.Empty;
+            return true;
+        }
+
+        private void BuildBattleNodeEncounterConfigs()
+        {
+            _battleNodeEncounterConfigs.Clear();
+
+            if (_journeyMap == null || _enemyPool.Count == 0)
+            {
+                return;
+            }
+
+            int runSeed = _journeyMap.Seed;
+            for (int i = 0; i < _journeyMap.Nodes.Count; i++)
+            {
+                JourneyMapNode node = _journeyMap.Nodes[i];
+                if (node.NodeType != JourneyNodeType.Battle && node.NodeType != JourneyNodeType.Boss)
+                {
+                    continue;
+                }
+
+                int encounterSeed = ComputeBattleEncounterSeed(runSeed, node.Id, node.NodeType);
+                var random = new System.Random(encounterSeed);
+                int enemyCount = RollBattleEnemyCount(random, node.NodeType);
+                var queue = new List<EnemyConfig>(enemyCount);
+                for (int index = 0; index < enemyCount; index++)
+                {
+                    queue.Add(_enemyPool[random.Next(0, _enemyPool.Count)]);
+                }
+
+                _battleNodeEncounterConfigs[node.Id] = new BattleEncounterConfig(
+                    node.Id,
+                    node.NodeType,
+                    encounterSeed,
+                    queue);
+            }
+        }
+
+        private int RollBattleEnemyCount(System.Random random, JourneyNodeType nodeType)
+        {
+            int minCount = nodeType == JourneyNodeType.Boss ? Mathf.Max(1, _bossEnemyCountMin) : Mathf.Max(1, _battleEnemyCountMin);
+            int maxCount = nodeType == JourneyNodeType.Boss ? Mathf.Max(minCount, _bossEnemyCountMax) : Mathf.Max(minCount, _battleEnemyCountMax);
+            return random.Next(minCount, maxCount + 1);
+        }
+
+        private static int ComputeBattleEncounterSeed(int runSeed, int nodeId, JourneyNodeType nodeType)
+        {
+            unchecked
+            {
+                int hash = runSeed;
+                hash = (hash * 397) ^ nodeId;
+                hash = (hash * 397) ^ (int)nodeType;
+                return hash;
+            }
         }
 
         private bool BlockJourneyAdvance(JourneyAdvanceBlockReason reason, string message, out string blockMessage)
@@ -496,11 +637,171 @@ namespace OneManJourney.Runtime
             _activeJourneyNodeId = -1;
             _activeJourneyNodeType = JourneyNodeType.Battle;
             _activeJourneySceneName = string.Empty;
+            _activeBattleEncounterConfig = null;
         }
 
         private void ClearJourneyAdvanceBlockMessage()
         {
             _lastJourneyAdvanceBlockMessage = string.Empty;
+        }
+
+        private void EvaluateDisasterTrigger(int previousCrisis, int currentCrisis)
+        {
+            if (currentCrisis < previousCrisis)
+            {
+                _nextDisasterTriggerThreshold = CalculateNextDisasterThreshold(currentCrisis);
+                return;
+            }
+
+            if (currentCrisis <= previousCrisis)
+            {
+                return;
+            }
+
+            if (_nextDisasterTriggerThreshold <= 0)
+            {
+                _nextDisasterTriggerThreshold = CalculateNextDisasterThreshold(previousCrisis);
+            }
+
+            int step = DisasterTriggerStep;
+            while (currentCrisis >= _nextDisasterTriggerThreshold)
+            {
+                TriggerDisasterEvent(_nextDisasterTriggerThreshold, currentCrisis);
+                if (_nextDisasterTriggerThreshold > int.MaxValue - step)
+                {
+                    _nextDisasterTriggerThreshold = int.MaxValue;
+                    break;
+                }
+
+                _nextDisasterTriggerThreshold += step;
+            }
+        }
+
+        private void TriggerDisasterEvent(int triggerThreshold, int currentCrisis)
+        {
+            bool usedFallbackEvent;
+            if (!TryPickDisasterEvent(out EventConfig selectedEvent, out usedFallbackEvent))
+            {
+                _pendingDisasterEvent = null;
+                _pendingDisasterType = DisasterEventType.None;
+                _lastDisasterTriggerMessage = "Crisis threshold reached, but no event is available in the event pool.";
+                Publish(new CrisisDisasterTriggeredEvent(
+                    currentCrisis,
+                    triggerThreshold,
+                    null,
+                    DisasterEventType.None,
+                    false));
+                return;
+            }
+
+            _pendingDisasterEvent = selectedEvent;
+            _pendingDisasterType = selectedEvent.DisasterType;
+            _lastDisasterTriggerMessage = usedFallbackEvent
+                ? $"Crisis reached {triggerThreshold}. Fallback event '{selectedEvent.DisplayName}' triggered as disaster."
+                : $"Crisis reached {triggerThreshold}. Disaster '{selectedEvent.DisplayName}' triggered ({selectedEvent.DisasterType}).";
+
+            Publish(new CrisisDisasterTriggeredEvent(
+                currentCrisis,
+                triggerThreshold,
+                selectedEvent,
+                selectedEvent.DisasterType,
+                usedFallbackEvent));
+        }
+
+        private bool TryPickDisasterEvent(out EventConfig selectedEvent, out bool usedFallbackEvent)
+        {
+            int disasterCount = 0;
+            for (int i = 0; i < _eventPool.Count; i++)
+            {
+                EventConfig gameEvent = _eventPool[i];
+                if (gameEvent != null && gameEvent.IsDisasterEvent)
+                {
+                    disasterCount++;
+                }
+            }
+
+            if (disasterCount > 0)
+            {
+                int pickIndex = UnityEngine.Random.Range(0, disasterCount);
+                for (int i = 0; i < _eventPool.Count; i++)
+                {
+                    EventConfig gameEvent = _eventPool[i];
+                    if (gameEvent == null || !gameEvent.IsDisasterEvent)
+                    {
+                        continue;
+                    }
+
+                    if (pickIndex == 0)
+                    {
+                        selectedEvent = gameEvent;
+                        usedFallbackEvent = false;
+                        return true;
+                    }
+
+                    pickIndex--;
+                }
+            }
+
+            int eventCount = 0;
+            for (int i = 0; i < _eventPool.Count; i++)
+            {
+                if (_eventPool[i] != null)
+                {
+                    eventCount++;
+                }
+            }
+
+            if (eventCount == 0)
+            {
+                selectedEvent = null;
+                usedFallbackEvent = false;
+                return false;
+            }
+
+            int fallbackPick = UnityEngine.Random.Range(0, eventCount);
+            for (int i = 0; i < _eventPool.Count; i++)
+            {
+                EventConfig gameEvent = _eventPool[i];
+                if (gameEvent == null)
+                {
+                    continue;
+                }
+
+                if (fallbackPick == 0)
+                {
+                    selectedEvent = gameEvent;
+                    usedFallbackEvent = true;
+                    return true;
+                }
+
+                fallbackPick--;
+            }
+
+            selectedEvent = null;
+            usedFallbackEvent = false;
+            return false;
+        }
+
+        private void ResetDisasterState()
+        {
+            _pendingDisasterEvent = null;
+            _pendingDisasterType = DisasterEventType.None;
+            _lastDisasterTriggerMessage = string.Empty;
+            _nextDisasterTriggerThreshold = CalculateNextDisasterThreshold(GetResource(ResourceType.Crisis));
+        }
+
+        private int CalculateNextDisasterThreshold(int currentCrisis)
+        {
+            int baseThreshold = DisasterTriggerThreshold;
+            if (currentCrisis < baseThreshold)
+            {
+                return baseThreshold;
+            }
+
+            int step = DisasterTriggerStep;
+            long increments = ((long)currentCrisis - baseThreshold) / step + 1;
+            long nextThreshold = (long)baseThreshold + increments * step;
+            return nextThreshold > int.MaxValue ? int.MaxValue : (int)nextThreshold;
         }
 
         private void Publish<TEvent>(TEvent gameEvent)
@@ -512,6 +813,7 @@ namespace OneManJourney.Runtime
         {
             _startingCardPool.RemoveAll(card => card == null);
             _startingEventPool.RemoveAll(gameEvent => gameEvent == null);
+            _startingEnemyPool.RemoveAll(enemy => enemy == null);
 
 #if UNITY_EDITOR
             if (!_autoLoadEditorData)
@@ -532,6 +834,11 @@ namespace OneManJourney.Runtime
             if (_startingEventPool.Count == 0)
             {
                 _startingEventPool = LoadAssets<EventConfig>();
+            }
+
+            if (_startingEnemyPool.Count == 0)
+            {
+                _startingEnemyPool = LoadAssets<EnemyConfig>();
             }
 #endif
         }
