@@ -141,6 +141,54 @@ namespace OneManJourney.Runtime
         EnemyTurn
     }
 
+    public readonly struct BattleEnemyIntentView
+    {
+        public BattleEnemyIntentView(
+            int enemyIndex,
+            string enemyId,
+            string enemyDisplayName,
+            EnemyIntentType intentType,
+            int intentValue,
+            bool isDefeated,
+            string summary)
+        {
+            EnemyIndex = enemyIndex;
+            EnemyId = enemyId ?? string.Empty;
+            EnemyDisplayName = enemyDisplayName ?? string.Empty;
+            IntentType = intentType;
+            IntentValue = intentValue;
+            IsDefeated = isDefeated;
+            Summary = summary ?? string.Empty;
+        }
+
+        public int EnemyIndex { get; }
+        public string EnemyId { get; }
+        public string EnemyDisplayName { get; }
+        public EnemyIntentType IntentType { get; }
+        public int IntentValue { get; }
+        public bool IsDefeated { get; }
+        public string Summary { get; }
+    }
+
+    public readonly struct BattleEnemyIntentUpdatedEvent
+    {
+        public BattleEnemyIntentUpdatedEvent(
+            int nodeId,
+            int turnNumber,
+            IReadOnlyList<BattleEnemyIntentView> enemyIntents)
+        {
+            NodeId = nodeId;
+            TurnNumber = turnNumber;
+            EnemyIntents = enemyIntents;
+            EnemyCount = enemyIntents?.Count ?? 0;
+        }
+
+        public int NodeId { get; }
+        public int TurnNumber { get; }
+        public IReadOnlyList<BattleEnemyIntentView> EnemyIntents { get; }
+        public int EnemyCount { get; }
+    }
+
     public readonly struct BattleFlowInitializedEvent
     {
         public BattleFlowInitializedEvent(
@@ -308,6 +356,10 @@ namespace OneManJourney.Runtime
             int nodeId,
             int turnNumber,
             int enemyCount,
+            int totalDamageToPlayer,
+            int totalArmorGained,
+            int totalResourcesPlundered,
+            string summary,
             int handCount,
             int drawPileCount,
             int discardPileCount,
@@ -316,6 +368,10 @@ namespace OneManJourney.Runtime
             NodeId = nodeId;
             TurnNumber = turnNumber;
             EnemyCount = enemyCount;
+            TotalDamageToPlayer = totalDamageToPlayer;
+            TotalArmorGained = totalArmorGained;
+            TotalResourcesPlundered = totalResourcesPlundered;
+            Summary = summary ?? string.Empty;
             HandCount = handCount;
             DrawPileCount = drawPileCount;
             DiscardPileCount = discardPileCount;
@@ -325,6 +381,10 @@ namespace OneManJourney.Runtime
         public int NodeId { get; }
         public int TurnNumber { get; }
         public int EnemyCount { get; }
+        public int TotalDamageToPlayer { get; }
+        public int TotalArmorGained { get; }
+        public int TotalResourcesPlundered { get; }
+        public string Summary { get; }
         public int HandCount { get; }
         public int DrawPileCount { get; }
         public int DiscardPileCount { get; }

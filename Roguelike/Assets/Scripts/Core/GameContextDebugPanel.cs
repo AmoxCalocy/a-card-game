@@ -26,6 +26,7 @@ namespace OneManJourney.Runtime
         private IDisposable _crisisDisasterTriggeredSubscription;
         private IDisposable _battleEncounterPreparedSubscription;
         private IDisposable _battleFlowInitializedSubscription;
+        private IDisposable _battleEnemyIntentUpdatedSubscription;
         private IDisposable _battleTurnStartedSubscription;
         private IDisposable _battleCardPlayedSubscription;
         private IDisposable _battleHandDiscardedSubscription;
@@ -193,6 +194,7 @@ namespace OneManJourney.Runtime
             _crisisDisasterTriggeredSubscription = _eventBus.Subscribe<CrisisDisasterTriggeredEvent>(HandleCrisisDisasterTriggered);
             _battleEncounterPreparedSubscription = _eventBus.Subscribe<BattleEncounterPreparedEvent>(HandleBattleEncounterPrepared);
             _battleFlowInitializedSubscription = _eventBus.Subscribe<BattleFlowInitializedEvent>(HandleBattleFlowInitialized);
+            _battleEnemyIntentUpdatedSubscription = _eventBus.Subscribe<BattleEnemyIntentUpdatedEvent>(HandleBattleEnemyIntentUpdated);
             _battleTurnStartedSubscription = _eventBus.Subscribe<BattleTurnStartedEvent>(HandleBattleTurnStarted);
             _battleCardPlayedSubscription = _eventBus.Subscribe<BattleCardPlayedEvent>(HandleBattleCardPlayed);
             _battleHandDiscardedSubscription = _eventBus.Subscribe<BattleHandDiscardedEvent>(HandleBattleHandDiscarded);
@@ -215,6 +217,7 @@ namespace OneManJourney.Runtime
             _crisisDisasterTriggeredSubscription?.Dispose();
             _battleEncounterPreparedSubscription?.Dispose();
             _battleFlowInitializedSubscription?.Dispose();
+            _battleEnemyIntentUpdatedSubscription?.Dispose();
             _battleTurnStartedSubscription?.Dispose();
             _battleCardPlayedSubscription?.Dispose();
             _battleHandDiscardedSubscription?.Dispose();
@@ -233,6 +236,7 @@ namespace OneManJourney.Runtime
             _crisisDisasterTriggeredSubscription = null;
             _battleEncounterPreparedSubscription = null;
             _battleFlowInitializedSubscription = null;
+            _battleEnemyIntentUpdatedSubscription = null;
             _battleTurnStartedSubscription = null;
             _battleCardPlayedSubscription = null;
             _battleHandDiscardedSubscription = null;
@@ -298,6 +302,11 @@ namespace OneManJourney.Runtime
         }
 
         private void HandleBattleTurnStarted(BattleTurnStartedEvent _)
+        {
+            Refresh();
+        }
+
+        private void HandleBattleEnemyIntentUpdated(BattleEnemyIntentUpdatedEvent _)
         {
             Refresh();
         }
@@ -528,6 +537,7 @@ namespace OneManJourney.Runtime
             _builder.AppendLine($"- Enemy Count: {_battleTurnController.EnemyQueue.Count}");
             _builder.AppendLine($"- Draw/Hand/Discard/Exhaust: {_battleTurnController.DrawPile.Count}/{_battleTurnController.Hand.Count}/{_battleTurnController.DiscardPile.Count}/{_battleTurnController.ExhaustPile.Count}");
             _builder.AppendLine($"- Last Effect: {_battleTurnController.LastCardEffectSummary}");
+            _builder.AppendLine($"- Last Enemy Turn: {_battleTurnController.LastEnemyTurnSummary}");
 
             if (_battleTurnController.EnemyStates.Count > 0)
             {
@@ -545,6 +555,16 @@ namespace OneManJourney.Runtime
                     _builder.AppendLine(
                         $"  - [{index}] {enemyState.DisplayName} {defeatedLabel} " +
                         $"HP {enemyState.CurrentHealth}/{enemyState.MaxHealth}, Armor {enemyState.Armor}, Status {enemyState.GetStatusSummary()}");
+                }
+            }
+
+            if (_battleTurnController.EnemyIntents.Count > 0)
+            {
+                _builder.AppendLine("- Next Enemy Intents:");
+                for (int index = 0; index < _battleTurnController.EnemyIntents.Count; index++)
+                {
+                    BattleEnemyIntentView intent = _battleTurnController.EnemyIntents[index];
+                    _builder.AppendLine($"  - [{intent.EnemyIndex}] {intent.EnemyDisplayName}: {intent.IntentType} {intent.IntentValue} {(intent.IsDefeated ? "(defeated)" : string.Empty)}");
                 }
             }
 

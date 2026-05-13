@@ -26,6 +26,7 @@ namespace OneManJourney.Runtime
         private IDisposable _journeyAdvanceBlockedSubscription;
         private IDisposable _battleEncounterPreparedSubscription;
         private IDisposable _battleFlowInitializedSubscription;
+        private IDisposable _battleEnemyIntentUpdatedSubscription;
         private IDisposable _battleTurnStartedSubscription;
         private IDisposable _battleCardPlayedSubscription;
         private IDisposable _battleHandDiscardedSubscription;
@@ -150,6 +151,7 @@ namespace OneManJourney.Runtime
                 _journeyAdvanceBlockedSubscription = _eventBus.Subscribe<JourneyAdvanceBlockedEvent>(HandleJourneyAdvanceBlocked);
                 _battleEncounterPreparedSubscription = _eventBus.Subscribe<BattleEncounterPreparedEvent>(HandleBattleEncounterPrepared);
                 _battleFlowInitializedSubscription = _eventBus.Subscribe<BattleFlowInitializedEvent>(HandleBattleFlowInitialized);
+                _battleEnemyIntentUpdatedSubscription = _eventBus.Subscribe<BattleEnemyIntentUpdatedEvent>(HandleBattleEnemyIntentUpdated);
                 _battleTurnStartedSubscription = _eventBus.Subscribe<BattleTurnStartedEvent>(HandleBattleTurnStarted);
                 _battleCardPlayedSubscription = _eventBus.Subscribe<BattleCardPlayedEvent>(HandleBattleCardPlayed);
                 _battleHandDiscardedSubscription = _eventBus.Subscribe<BattleHandDiscardedEvent>(HandleBattleHandDiscarded);
@@ -167,6 +169,7 @@ namespace OneManJourney.Runtime
             _journeyAdvanceBlockedSubscription?.Dispose();
             _battleEncounterPreparedSubscription?.Dispose();
             _battleFlowInitializedSubscription?.Dispose();
+            _battleEnemyIntentUpdatedSubscription?.Dispose();
             _battleTurnStartedSubscription?.Dispose();
             _battleCardPlayedSubscription?.Dispose();
             _battleHandDiscardedSubscription?.Dispose();
@@ -177,6 +180,7 @@ namespace OneManJourney.Runtime
             _journeyAdvanceBlockedSubscription = null;
             _battleEncounterPreparedSubscription = null;
             _battleFlowInitializedSubscription = null;
+            _battleEnemyIntentUpdatedSubscription = null;
             _battleTurnStartedSubscription = null;
             _battleCardPlayedSubscription = null;
             _battleHandDiscardedSubscription = null;
@@ -240,6 +244,13 @@ namespace OneManJourney.Runtime
                 $"draw/hand/discard/exhaust={evt.DrawPileCount}/{evt.HandCount}/{evt.DiscardPileCount}/{evt.ExhaustPileCount}.");
         }
 
+        private static void HandleBattleEnemyIntentUpdated(BattleEnemyIntentUpdatedEvent evt)
+        {
+            Debug.Log(
+                "Step13TestDriver Event: EnemyIntentUpdated " +
+                $"node={evt.NodeId}, turn={evt.TurnNumber}, intents=[{FormatEnemyIntents(evt.EnemyIntents)}].");
+        }
+
         private static void HandleBattleCardPlayed(BattleCardPlayedEvent evt)
         {
             string cardName = evt.Card == null ? "null" : $"{evt.Card.DisplayName} ({evt.Card.Id})";
@@ -262,8 +273,10 @@ namespace OneManJourney.Runtime
         private static void HandleBattleEnemyTurnResolved(BattleEnemyTurnResolvedEvent evt)
         {
             Debug.Log(
-                "Step11TestDriver Event: EnemyTurnResolved " +
+                "Step13TestDriver Event: EnemyTurnResolved " +
                 $"node={evt.NodeId}, turn={evt.TurnNumber}, enemyCount={evt.EnemyCount}, " +
+                $"result(dmg/armor/plunder)={evt.TotalDamageToPlayer}/{evt.TotalArmorGained}/{evt.TotalResourcesPlundered}, " +
+                $"summary='{evt.Summary}', " +
                 $"draw/hand/discard/exhaust={evt.DrawPileCount}/{evt.HandCount}/{evt.DiscardPileCount}/{evt.ExhaustPileCount}.");
         }
 
@@ -290,6 +303,23 @@ namespace OneManJourney.Runtime
             }
 
             return string.Join(", ", names);
+        }
+
+        private static string FormatEnemyIntents(IReadOnlyList<BattleEnemyIntentView> intents)
+        {
+            if (intents == null || intents.Count == 0)
+            {
+                return "none";
+            }
+
+            string[] entries = new string[intents.Count];
+            for (int i = 0; i < intents.Count; i++)
+            {
+                BattleEnemyIntentView intent = intents[i];
+                entries[i] = $"#{intent.EnemyIndex}:{intent.EnemyDisplayName}:{intent.IntentType}({intent.IntentValue})";
+            }
+
+            return string.Join(", ", entries);
         }
 
         private void OnGUI()

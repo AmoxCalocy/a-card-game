@@ -365,3 +365,46 @@
   - 状态可叠层（示例：`Bleed` 可连续增长）。
   - `BattleCardPlayedEvent` 明细与面板状态一致，可用于后续自动化断言。
 - 验证结论：第12步验收通过；按约束未开始第13步。
+
+## 敌人意图与执行层（2026-05-13，实施计划第13步）
+- 目标：把敌方阶段从“占位流程”升级为“可预览意图 + 可执行行动”的闭环，形成“回合开始发布下回合意图 -> 玩家决策 -> 敌方按意图执行 -> 输出执行结果摘要”的可观测链路。
+- 关键架构洞察：
+  - 引入“计划值（planned）”与“实际生效值（effective）”双层语义：
+    - planned：`BattleEnemyIntentUpdatedEvent` 中的 `IntentType + IntentValue`，用于 UI 预览。
+    - effective：`BattleEnemyTurnResolvedEvent` 中的伤害/护甲/掠夺结果，受护甲吸收、资源上限、单位存活等运行时条件影响。
+  - 验收与调试必须按同一 `turn` 对齐比较“类型一致性”和“结果合理性（effective <= planned）”，而不是要求数值逐项恒等。
+  - 保持 `BattleTurnController` 单点控制：意图生成与执行均在同一控制器，避免 UI 层和控制层维护两套敌方行为状态导致漂移。
+
+- 文件职责（第13步相关）：
+  - `Assets/Scripts/Core/BattleTurnController.cs`
+    - 新增意图计划缓存：`_enemyIntents`，并在 `BeginPlayerTurn` 中调用 `RebuildEnemyIntentPlan()`。
+    - 新增敌方执行链路：`ResolveEnemyTurn()`，按意图执行 `Attack/Defend/Plunder`。
+    - 新增资源掠夺策略：`TryPlunderResources()`（优先 `Wealth`，不足补扣 `Food`）。
+    - 新增观测字段：`EnemyIntents`、`LastEnemyTurnSummary`。
+  - `Assets/Scripts/Core/GameEventMessages.cs`
+    - 新增 `BattleEnemyIntentView`（敌方意图快照结构）。
+    - 新增 `BattleEnemyIntentUpdatedEvent`（按回合广播意图列表）。
+    - 扩展 `BattleEnemyTurnResolvedEvent`，承载敌方回合实际执行聚合结果与摘要。
+  - `Assets/Scripts/Core/GameContextDebugPanel.cs`
+    - 新增调试展示：`Next Enemy Intents`、`Last Enemy Turn`。
+    - 订阅 `BattleEnemyIntentUpdatedEvent`，确保回合意图刷新时面板即时同步。
+  - `Assets/Scripts/Core/GameContextStep8TestDriver.cs`
+    - 新增第13步日志观测入口：输出意图刷新事件和敌方回合执行结果，供人工验收与回归记录。
+
+- 生命周期与数据流（第13步）：
+  - 玩家回合开始：`BattleTurnController.BeginPlayerTurn()` 先生成下一次敌方行动计划并发布 `BattleEnemyIntentUpdatedEvent`，再执行玩家抽牌/能量重置。
+  - 玩家结束回合：`TryEndPlayerTurn()` 将阶段切换到 `EnemyTurn`，调用 `ResolveEnemyTurn()` 执行已发布的意图计划。
+  - 敌方执行后：发布扩展后的 `BattleEnemyTurnResolvedEvent`（dmg/armor/plunder + summary），随后开启下一玩家回合并刷新新一轮意图。
+
+- 边界与后续：
+  - 本层仅实现基础三意图（攻击/防御/掠夺）及可读提示，不包含复杂技能脚本、多段连携、遗物联动和敌方战术树。
+  - 第14步战斗结算（胜负奖励/惩罚、伙伴受伤）仍未开始，保持阶段边界清晰。
+
+## 第13步验证状态（2026-05-13）
+- 验证环境：Unity 2022.3.62f2c1，`Assets/Scenes/SampleScene.unity` + `BattleScene.unity`。
+- 验证方法：通过 `GameContextStep8TestDriver` 持续结束玩家回合，观察 `EnemyIntentUpdated` 与 `EnemyTurnResolved` 的同回合对齐关系，以及调试面板实时刷新。
+- 验证结果：
+  - 回合编号持续增长且意图事件持续刷新。
+  - `EnemyTurnResolved` 与对应回合意图在“行动类型”上保持一致。
+  - 观察到 planned 与 effective 数值可不同（如伤害被护甲吸收、掠夺受资源余量限制），符合第13步语义定义。
+  - 验证结论：第13步验收通过。

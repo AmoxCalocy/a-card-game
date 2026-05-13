@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 using OneManJourney.Data;
 using UnityEngine;
 
@@ -16,6 +17,11 @@ namespace OneManJourney.Runtime
         [Header("Player Combat Stats")]
         [Min(1)]
         [SerializeField] private int _playerMaxHealth = 40;
+        [Header("Enemy Intent Rules")]
+        [Min(0)]
+        [SerializeField] private int _enemyDefendBonusWhenNoBaseDefense = 2;
+        [Min(1)]
+        [SerializeField] private int _enemyPlunderAmount = 2;
 
         private readonly List<CardConfig> _drawPile = new List<CardConfig>();
         private readonly List<CardConfig> _hand = new List<CardConfig>();
@@ -23,6 +29,7 @@ namespace OneManJourney.Runtime
         private readonly List<CardConfig> _exhaustPile = new List<CardConfig>();
         private readonly List<EnemyConfig> _enemyQueue = new List<EnemyConfig>();
         private readonly List<BattleCombatantState> _enemyStates = new List<BattleCombatantState>();
+        private readonly List<BattleEnemyIntentView> _enemyIntents = new List<BattleEnemyIntentView>();
         private GameContext _context;
         private GameEventBus _eventBus;
         private IDisposable _journeyNodeEnteredSubscription;
@@ -36,6 +43,7 @@ namespace OneManJourney.Runtime
         private System.Random _random;
         private BattleCombatantState _playerState;
         private string _lastCardEffectSummary = string.Empty;
+        private string _lastEnemyTurnSummary = "none";
 
         public bool IsActive => _isActive;
         public int TurnNumber => _turnNumber;
@@ -47,11 +55,13 @@ namespace OneManJourney.Runtime
         public int PlayerArmor => _playerState == null ? 0 : _playerState.Armor;
         public string PlayerStatusSummary => _playerState == null ? "none" : _playerState.GetStatusSummary();
         public string LastCardEffectSummary => string.IsNullOrWhiteSpace(_lastCardEffectSummary) ? "none" : _lastCardEffectSummary;
+        public string LastEnemyTurnSummary => string.IsNullOrWhiteSpace(_lastEnemyTurnSummary) ? "none" : _lastEnemyTurnSummary;
         public int ActiveNodeId => _activeNodeId;
         public JourneyNodeType ActiveNodeType => _activeNodeType;
         public BattleTurnPhase Phase => _phase;
         public IReadOnlyList<EnemyConfig> EnemyQueue => _enemyQueue;
         public IReadOnlyList<BattleCombatantState> EnemyStates => _enemyStates;
+        public IReadOnlyList<BattleEnemyIntentView> EnemyIntents => _enemyIntents;
         public IReadOnlyList<CardConfig> DrawPile => _drawPile;
         public IReadOnlyList<CardConfig> Hand => _hand;
         public IReadOnlyList<CardConfig> DiscardPile => _discardPile;
@@ -215,10 +225,16 @@ namespace OneManJourney.Runtime
                 _exhaustPile.Count));
 
             _phase = BattleTurnPhase.EnemyTurn;
+            EnemyTurnResolution resolution = ResolveEnemyTurn();
+            _lastEnemyTurnSummary = resolution.Summary;
             Publish(new BattleEnemyTurnResolvedEvent(
                 _activeNodeId,
                 _turnNumber,
                 _enemyQueue.Count,
+                resolution.TotalDamageToPlayer,
+                resolution.TotalArmorGained,
+                resolution.TotalResourcesPlundered,
+                resolution.Summary,
                 _hand.Count,
                 _drawPile.Count,
                 _discardPile.Count,
@@ -388,6 +404,7 @@ namespace OneManJourney.Runtime
             }
 
             _lastCardEffectSummary = "Battle initialized.";
+            _lastEnemyTurnSummary = "Awaiting first enemy turn.";
         }
 
         private CardEffectResult ExecuteCardEffect(CardConfig card)
@@ -529,6 +546,7 @@ namespace OneManJourney.Runtime
             }
 
             _turnNumber += 1;
+            RebuildEnemyIntentPlan();
             _phase = BattleTurnPhase.PlayerTurn;
             _currentEnergy = MaxEnergyPerTurn;
             int drawn = DrawCards(CardsDrawPerTurn);
@@ -660,8 +678,222 @@ namespace OneManJourney.Runtime
             _exhaustPile.Clear();
             _enemyQueue.Clear();
             _enemyStates.Clear();
+            _enemyIntents.Clear();
             _playerState = null;
             _lastCardEffectSummary = string.Empty;
+            _lastEnemyTurnSummary = string.Empty;
+        }
+
+        private void RebuildEnemyIntentPlan()
+        {
+            _enemyIntents.Clear();
+            for (int index = 0; index < _enemyStates.Count; index++)
+            {
+                BattleCombatantState enemyState = _enemyStates[index];
+                EnemyIntentType intentType = SelectEnemyIntent(enemyState, index);
+                int intentValue = CalculateIntentValue(enemyState, intentType);
+                bool isDefeated = enemyState == null || enemyState.IsDefeated;
+                string summary = BuildEnemyIntentSummary(enemyState, intentType, intentValue, isDefeated);
+                _enemyIntents.Add(new BattleEnemyIntentView(
+                    index,
+                    enemyState?.Id,
+                    enemyState?.DisplayName,
+                    intentType,
+                    intentValue,
+                    isDefeated,
+                    summary));
+            }
+
+            Publish(new BattleEnemyIntentUpdatedEvent(
+                _activeNodeId,
+                _turnNumber,
+                new List<BattleEnemyIntentView>(_enemyIntents)));
+        }
+
+        private EnemyIntentType SelectEnemyIntent(BattleCombatantState enemyState, int enemyIndex)
+        {
+            if (enemyState == null || enemyState.IsDefeated)
+            {
+                return EnemyIntentType.Attack;
+            }
+
+            EnemyIntentType primaryIntent = enemyState.EnemyConfig == null
+                ? EnemyIntentType.Attack
+                : enemyState.EnemyConfig.PrimaryIntent;
+            int pattern = Math.Abs(_turnNumber + enemyIndex) % 3;
+            return pattern switch
+            {
+                0 => primaryIntent,
+                1 => GetNextIntent(primaryIntent),
+                _ => GetPreviousIntent(primaryIntent)
+            };
+        }
+
+        private int CalculateIntentValue(BattleCombatantState enemyState, EnemyIntentType intentType)
+        {
+            if (enemyState == null || enemyState.IsDefeated)
+            {
+                return 0;
+            }
+
+            EnemyConfig enemyConfig = enemyState.EnemyConfig;
+            int baseAttack = enemyConfig == null ? 0 : Mathf.Max(0, enemyConfig.BaseAttack);
+            int baseDefense = enemyConfig == null ? 0 : Mathf.Max(0, enemyConfig.BaseDefense);
+            return intentType switch
+            {
+                EnemyIntentType.Attack => Mathf.Max(1, baseAttack),
+                EnemyIntentType.Defend => Mathf.Max(1, baseDefense > 0 ? baseDefense : baseAttack / 2 + _enemyDefendBonusWhenNoBaseDefense),
+                EnemyIntentType.Plunder => Mathf.Max(1, _enemyPlunderAmount),
+                _ => 1
+            };
+        }
+
+        private static EnemyIntentType GetNextIntent(EnemyIntentType intentType)
+        {
+            return intentType switch
+            {
+                EnemyIntentType.Attack => EnemyIntentType.Defend,
+                EnemyIntentType.Defend => EnemyIntentType.Plunder,
+                _ => EnemyIntentType.Attack
+            };
+        }
+
+        private static EnemyIntentType GetPreviousIntent(EnemyIntentType intentType)
+        {
+            return intentType switch
+            {
+                EnemyIntentType.Attack => EnemyIntentType.Plunder,
+                EnemyIntentType.Defend => EnemyIntentType.Attack,
+                _ => EnemyIntentType.Defend
+            };
+        }
+
+        private static string BuildEnemyIntentSummary(
+            BattleCombatantState enemyState,
+            EnemyIntentType intentType,
+            int intentValue,
+            bool isDefeated)
+        {
+            string enemyName = enemyState == null ? "Unknown Enemy" : enemyState.DisplayName;
+            if (isDefeated)
+            {
+                return $"{enemyName} defeated, no action.";
+            }
+
+            return intentType switch
+            {
+                EnemyIntentType.Attack => $"{enemyName}: Attack for {intentValue}.",
+                EnemyIntentType.Defend => $"{enemyName}: Defend for {intentValue} armor.",
+                EnemyIntentType.Plunder => $"{enemyName}: Plunder up to {intentValue} resources.",
+                _ => $"{enemyName}: Unknown intent."
+            };
+        }
+
+        private EnemyTurnResolution ResolveEnemyTurn()
+        {
+            if (_enemyIntents.Count == 0)
+            {
+                RebuildEnemyIntentPlan();
+            }
+
+            int totalDamageToPlayer = 0;
+            int totalArmorGained = 0;
+            int totalResourcesPlundered = 0;
+            var summaryBuilder = new StringBuilder();
+            bool hasAction = false;
+
+            for (int index = 0; index < _enemyIntents.Count; index++)
+            {
+                BattleEnemyIntentView intent = _enemyIntents[index];
+                if (intent.IsDefeated || intent.IntentValue <= 0)
+                {
+                    continue;
+                }
+
+                hasAction = true;
+                BattleCombatantState enemyState = index >= 0 && index < _enemyStates.Count ? _enemyStates[index] : null;
+                int actionDamage = 0;
+                int actionArmor = 0;
+                int actionPlunder = 0;
+
+                switch (intent.IntentType)
+                {
+                    case EnemyIntentType.Attack:
+                        if (_playerState != null)
+                        {
+                            actionDamage = _playerState.ApplyDamage(intent.IntentValue);
+                            totalDamageToPlayer += actionDamage;
+                        }
+
+                        summaryBuilder.Append($"{intent.EnemyDisplayName} attacked for {actionDamage}. ");
+                        break;
+                    case EnemyIntentType.Defend:
+                        if (enemyState != null)
+                        {
+                            actionArmor = enemyState.AddArmor(intent.IntentValue);
+                            totalArmorGained += actionArmor;
+                        }
+
+                        summaryBuilder.Append($"{intent.EnemyDisplayName} gained {actionArmor} armor. ");
+                        break;
+                    case EnemyIntentType.Plunder:
+                        actionPlunder = TryPlunderResources(intent.IntentValue);
+                        totalResourcesPlundered += actionPlunder;
+                        if (_playerState != null)
+                        {
+                            _playerState.AddStatus(StatusEffectType.Plunder, actionPlunder > 0 ? 1 : 0);
+                        }
+
+                        summaryBuilder.Append($"{intent.EnemyDisplayName} plundered {actionPlunder}. ");
+                        break;
+                }
+            }
+
+            if (!hasAction)
+            {
+                summaryBuilder.Append("No active enemy actions.");
+            }
+
+            return new EnemyTurnResolution(
+                totalDamageToPlayer,
+                totalArmorGained,
+                totalResourcesPlundered,
+                summaryBuilder.ToString().Trim());
+        }
+
+        private int TryPlunderResources(int amount)
+        {
+            if (_context == null || amount <= 0)
+            {
+                return 0;
+            }
+
+            int remaining = amount;
+            int plundered = 0;
+
+            int wealthBefore = _context.GetResource(ResourceType.Wealth);
+            if (wealthBefore > 0)
+            {
+                _context.AddResource(ResourceType.Wealth, -remaining);
+                int wealthAfter = _context.GetResource(ResourceType.Wealth);
+                int stolenFromWealth = wealthBefore - wealthAfter;
+                plundered += stolenFromWealth;
+                remaining -= stolenFromWealth;
+            }
+
+            if (remaining > 0)
+            {
+                int foodBefore = _context.GetResource(ResourceType.Food);
+                if (foodBefore > 0)
+                {
+                    _context.AddResource(ResourceType.Food, -remaining);
+                    int foodAfter = _context.GetResource(ResourceType.Food);
+                    int stolenFromFood = foodBefore - foodAfter;
+                    plundered += stolenFromFood;
+                }
+            }
+
+            return plundered;
         }
 
         private void Publish<TEvent>(TEvent gameEvent)
@@ -677,6 +909,26 @@ namespace OneManJourney.Runtime
             public int CardsDrawn;
             public int StatusStacksApplied;
             public string Summary;
+        }
+
+        private readonly struct EnemyTurnResolution
+        {
+            public EnemyTurnResolution(
+                int totalDamageToPlayer,
+                int totalArmorGained,
+                int totalResourcesPlundered,
+                string summary)
+            {
+                TotalDamageToPlayer = totalDamageToPlayer;
+                TotalArmorGained = totalArmorGained;
+                TotalResourcesPlundered = totalResourcesPlundered;
+                Summary = summary ?? string.Empty;
+            }
+
+            public int TotalDamageToPlayer { get; }
+            public int TotalArmorGained { get; }
+            public int TotalResourcesPlundered { get; }
+            public string Summary { get; }
         }
     }
 }

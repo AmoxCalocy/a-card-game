@@ -125,3 +125,23 @@
   - `Assets/Data/TestStep4/CardConfig_Logistics.asset`（Logistics：战地医护）
   - `Assets/Data/TestStep4/CardConfig_Tactic.asset`（Tactic：包围网）
 - 验证结论：第12步验收通过（5张示例牌按描述生效，且状态可叠层）；按约束未开始第13步。
+
+2026-05-13：完成实施计划第13步（敌人 AI 意图）并验证通过（由测试执行）
+- 在 `Assets/Scripts/Core/BattleTurnController.cs` 引入敌方意图计划层：每个玩家回合开始时为每个敌人生成下一回合意图快照（`Attack`/`Defend`/`Plunder`），并通过事件总线发布。
+- 将敌方阶段从“占位事件”升级为“按意图执行”：
+  - `Attack`：对玩家状态执行伤害结算（受护甲吸收影响）。
+  - `Defend`：为对应敌方单位增加护甲。
+  - `Plunder`：优先掠夺 `Wealth`，不足时继续掠夺 `Food`，并记录掠夺总量。
+- 在 `Assets/Scripts/Core/GameEventMessages.cs` 新增第13步事件契约：
+  - `BattleEnemyIntentView`：单个敌人的意图快照（类型、计划值、摘要、是否已死亡）。
+  - `BattleEnemyIntentUpdatedEvent`：回合维度的意图刷新事件。
+  - 扩展 `BattleEnemyTurnResolvedEvent`：新增 `TotalDamageToPlayer` / `TotalArmorGained` / `TotalResourcesPlundered` / `Summary`，用于对照意图与执行结果。
+- 在 `Assets/Scripts/Core/GameContextDebugPanel.cs` 增加战斗观测字段：`Next Enemy Intents` 与 `Last Enemy Turn`，并订阅 `BattleEnemyIntentUpdatedEvent` 以确保意图变化即时可见。
+- 在 `Assets/Scripts/Core/GameContextStep8TestDriver.cs` 增加第13步日志输出：
+  - `Step13TestDriver Event: EnemyIntentUpdated ...`
+  - `Step13TestDriver Event: EnemyTurnResolved ... result(dmg/armor/plunder)=...`
+- 验收说明（关键口径）：
+  - `EnemyIntentUpdated` 的 `intents` 表示“计划值（planned）”；
+  - `EnemyTurnResolved` 的 `result` 表示“实际生效值（effective）”；
+  - 二者按同一 `turn` 对齐，允许出现 `effective <= planned`（如护甲吸收、资源不足、目标已死亡）。
+- 验证结论：第13步验收通过；在你后续明确指令前不开始第14步。
