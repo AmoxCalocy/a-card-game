@@ -408,3 +408,34 @@
   - `EnemyTurnResolved` 与对应回合意图在“行动类型”上保持一致。
   - 观察到 planned 与 effective 数值可不同（如伤害被护甲吸收、掠夺受资源余量限制），符合第13步语义定义。
   - 验证结论：第13步验收通过。
+
+## 战斗结算层（2026-05-14，实施计划第14步）
+- 目标：将战斗从"无限循环"升级为"可结束流程"，形成"检测胜负 -> 执行结算 -> 发布事件 -> 结束战斗"的闭环。
+- 关键架构洞察：
+  - 结算在 `EndBattleFlow` 清空状态前发布 `BattleSettledEvent`，确保调试面板/测试驱动在状态仍存在时即可观测结算结果。
+  - 胜利检测点有两处：打出卡牌后（可能一击杀死最后敌人）和结束回合后（敌方阶段结束重新检测）。立即检测避免玩家需要手动"结束空回合"。
+  - 失败检测仅在敌方回合结算后，因为敌方只能在其回合内造成伤害。
+  - 失败惩罚的卡牌丢弃目标为 `GameContext.CardPool`（持久卡池），而非临时战斗牌堆（`_drawPile/_hand` 等会在 `EndBattleFlow` 中被清空），确保损失具有持久性。
+- 文件职责（第14步相关）：
+  - `Assets/Scripts/Core/BattleTurnController.cs`
+    - 第14步结算聚合点：`CheckBattleOutcome()` 统一检测胜负，`ResolveVictory()` 汇总敌人物品掉落并发放，`ResolveDefeat()` 扣除资源与卡牌。
+    - 新增可配置失败惩罚参数：财富损失比例、粮食损失比例、弃牌数量。
+    - 保持 `EndBattleFlow` 为单一清场出口，结算在清空前完成资源写入与事件发布。
+  - `Assets/Scripts/Core/GameEventMessages.cs`
+    - 新增 `BattleSettledEvent`：承载胜负结果、奖励列表、损失列表、弃牌计数、伙伴受伤占位、结算摘要，作为战斗结束的统一可观测契约。
+  - `Assets/Scripts/Core/GameContext.cs`
+    - 新增 `TryRemoveRandomCard()`：从卡池随机移除一张卡牌，供失败弃牌惩罚调用，与 `TryDrawCard`（从头部移除）互补。
+  - `Assets/Scripts/Core/GameContextDebugPanel.cs`
+    - 新增结算展示区（Last Settlement）：显示结局（VICTORY/DEFEAT）、摘要、奖励明细、损失明细、弃牌数。通过 `_lastBattleSettledEvent` 缓存实现战斗结束后持续可见。
+  - `Assets/Scripts/Core/GameContextStep8TestDriver.cs`
+    - 新增 `BattleSettledEvent` 订阅与 `FormatResourceAmounts` 格式化辅助，输出结算详情日志供人工回归。
+  - `Assets/Data/TestStep4/EnemyConfig.asset`
+    - 更新测试敌人战利品（+10 Food、+5 Wealth），确保第14步奖励路径有可观测数据。
+- 生命周期与数据流（第14步）：
+  - 胜利流程：玩家出牌 `TryPlayCard` → `ExecuteCardEffect` 击杀最后敌人 → `CheckBattleOutcome()` → `AllEnemiesDefeated()` 返回 true → `ResolveVictory()` 汇总 `EnemyConfig.DefeatRewards` → `AddResource` 发放 → `Publish(BattleSettledEvent)` → `EndBattleFlow("Victory")`。
+  - 失败流程：玩家结束回合 `TryEndPlayerTurn` → `ResolveEnemyTurn` 敌方攻击致死 → `CheckBattleOutcome()` → `IsPlayerDefeated()` 返回 true → `ResolveDefeat()` 扣除财富/食物百分比 + 随机弃牌 → `Publish(BattleSettledEvent)` → `EndBattleFlow("Defeat")`。
+  - 外部节点完成（JourneyNodeCompletedEvent）仍调用 `EndBattleFlow("Journey node completed.")` 作为第三出口，不触发结算。
+- 边界与后续：
+  - 本层仅实现胜负二元结算与资源/卡牌奖惩，`CompanionInjured` 硬编码为 `false` 作为伙伴系统的占位钩子。
+  - 第15步伙伴招募/编制系统将消费该钩子，补充伙伴受伤/离队逻辑。
+  - 当前未实现"部分奖励"（战败时给予已击杀敌人的战利品），设计上保持二元清晰。

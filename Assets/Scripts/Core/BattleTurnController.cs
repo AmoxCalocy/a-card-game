@@ -22,6 +22,13 @@ namespace OneManJourney.Runtime
         [SerializeField] private int _enemyDefendBonusWhenNoBaseDefense = 2;
         [Min(1)]
         [SerializeField] private int _enemyPlunderAmount = 2;
+        [Header("Defeat Penalties")]
+        [Range(0f, 1f)]
+        [SerializeField] private float _defeatWealthLossPercent = 0.3f;
+        [Range(0f, 1f)]
+        [SerializeField] private float _defeatFoodLossPercent = 0.2f;
+        [Min(1)]
+        [SerializeField] private int _defeatCardsLostCount = 1;
 
         private readonly List<CardConfig> _drawPile = new List<CardConfig>();
         private readonly List<CardConfig> _hand = new List<CardConfig>();
@@ -164,6 +171,8 @@ namespace OneManJourney.Runtime
                 _discardPile.Count,
                 _exhaustPile.Count));
 
+            CheckBattleOutcome();
+
             message = string.Empty;
             return true;
         }
@@ -240,7 +249,11 @@ namespace OneManJourney.Runtime
                 _discardPile.Count,
                 _exhaustPile.Count));
 
-            BeginPlayerTurn();
+            if (!CheckBattleOutcome())
+            {
+                BeginPlayerTurn();
+            }
+
             message = string.Empty;
             return true;
         }
@@ -648,6 +661,202 @@ namespace OneManJourney.Runtime
                 int swapIndex = _random.Next(0, index + 1);
                 (cards[index], cards[swapIndex]) = (cards[swapIndex], cards[index]);
             }
+        }
+
+        private bool CheckBattleOutcome()
+        {
+            if (!_isActive)
+            {
+                return false;
+            }
+
+            if (AllEnemiesDefeated())
+            {
+                ResolveVictory();
+                return true;
+            }
+
+            if (IsPlayerDefeated())
+            {
+                ResolveDefeat();
+                return true;
+            }
+
+            return false;
+        }
+
+        private bool AllEnemiesDefeated()
+        {
+            for (int i = 0; i < _enemyStates.Count; i++)
+            {
+                if (!_enemyStates[i].IsDefeated)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private bool IsPlayerDefeated()
+        {
+            return _playerState != null && _playerState.IsDefeated;
+        }
+
+        private void ResolveVictory()
+        {
+            var rewardMap = new Dictionary<ResourceType, int>();
+            for (int i = 0; i < _enemyStates.Count; i++)
+            {
+                EnemyConfig enemyConfig = _enemyStates[i].EnemyConfig;
+                if (enemyConfig == null)
+                {
+                    continue;
+                }
+
+                IReadOnlyList<ResourceAmount> rewards = enemyConfig.DefeatRewards;
+                if (rewards == null || rewards.Count == 0)
+                {
+                    continue;
+                }
+
+                for (int j = 0; j < rewards.Count; j++)
+                {
+                    ResourceAmount reward = rewards[j];
+                    if (reward.Amount <= 0)
+                    {
+                        continue;
+                    }
+
+                    int current = rewardMap.TryGetValue(reward.Type, out int existing) ? existing : 0;
+                    rewardMap[reward.Type] = current + reward.Amount;
+                }
+            }
+
+            var rewardList = new List<ResourceAmount>(rewardMap.Count);
+            var summaryBuilder = new StringBuilder();
+            summaryBuilder.Append("Victory! Rewards: ");
+            bool hasRewards = false;
+            foreach (KeyValuePair<ResourceType, int> entry in rewardMap)
+            {
+                if (_context != null)
+                {
+                    _context.AddResource(entry.Key, entry.Value);
+                }
+
+                rewardList.Add(new ResourceAmount { Type = entry.Key, Amount = entry.Value });
+
+                if (hasRewards)
+                {
+                    summaryBuilder.Append(", ");
+                }
+
+                summaryBuilder.Append($"+{entry.Value} {entry.Key}");
+                hasRewards = true;
+            }
+
+            if (!hasRewards)
+            {
+                summaryBuilder.Append("none");
+            }
+
+            string summary = summaryBuilder.ToString();
+
+            Publish(new BattleSettledEvent(
+                _activeNodeId,
+                _turnNumber,
+                isVictory: true,
+                rewardList,
+                resourcesLost: System.Array.Empty<ResourceAmount>(),
+                cardsDiscardedCount: 0,
+                companionInjured: false,
+                summary));
+
+            EndBattleFlow("Victory");
+        }
+
+        private void ResolveDefeat()
+        {
+            int wealthLost = 0;
+            int foodLost = 0;
+            int cardsLostCount = 0;
+            var resourcesLostList = new List<ResourceAmount>();
+
+            if (_context != null)
+            {
+                int currentWealth = _context.GetResource(ResourceType.Wealth);
+                if (currentWealth > 0)
+                {
+                    wealthLost = Mathf.Max(0, Mathf.RoundToInt(currentWealth * _defeatWealthLossPercent));
+                    if (wealthLost > 0)
+                    {
+                        _context.AddResource(ResourceType.Wealth, -wealthLost);
+                        resourcesLostList.Add(new ResourceAmount { Type = ResourceType.Wealth, Amount = wealthLost });
+                    }
+                }
+
+                int currentFood = _context.GetResource(ResourceType.Food);
+                if (currentFood > 0)
+                {
+                    foodLost = Mathf.Max(0, Mathf.RoundToInt(currentFood * _defeatFoodLossPercent));
+                    if (foodLost > 0)
+                    {
+                        _context.AddResource(ResourceType.Food, -foodLost);
+                        resourcesLostList.Add(new ResourceAmount { Type = ResourceType.Food, Amount = foodLost });
+                    }
+                }
+
+                for (int i = 0; i < _defeatCardsLostCount; i++)
+                {
+                    if (_context.TryRemoveRandomCard(out _))
+                    {
+                        cardsLostCount++;
+                    }
+                }
+            }
+
+            var summaryBuilder = new StringBuilder();
+            summaryBuilder.Append("Defeat! Lost: ");
+            bool hasLoss = false;
+
+            if (wealthLost > 0)
+            {
+                summaryBuilder.Append($"-{wealthLost} Wealth");
+                hasLoss = true;
+            }
+
+            if (foodLost > 0)
+            {
+                if (hasLoss) summaryBuilder.Append(", ");
+                summaryBuilder.Append($"-{foodLost} Food");
+                hasLoss = true;
+            }
+
+            if (cardsLostCount > 0)
+            {
+                if (hasLoss) summaryBuilder.Append(", ");
+                summaryBuilder.Append($"-{cardsLostCount} card(s)");
+                hasLoss = true;
+            }
+
+            if (!hasLoss)
+            {
+                summaryBuilder.Append("none");
+            }
+
+            string summary = summaryBuilder.ToString();
+
+            Publish(new BattleSettledEvent(
+                _activeNodeId,
+                _turnNumber,
+                isVictory: false,
+                rewards: System.Array.Empty<ResourceAmount>(),
+                resourcesLostList,
+                cardsLostCount,
+                companionInjured: false,
+                summary));
+
+            EndBattleFlow("Defeat");
         }
 
         private void EndBattleFlow(string reason)

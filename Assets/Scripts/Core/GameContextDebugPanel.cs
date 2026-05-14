@@ -33,6 +33,8 @@ namespace OneManJourney.Runtime
         private IDisposable _battleEnemyTurnResolvedSubscription;
         private IDisposable _battleCardsDrawnSubscription;
         private IDisposable _battleFlowEndedSubscription;
+        private IDisposable _battleSettledSubscription;
+        private BattleSettledEvent? _lastBattleSettledEvent;
         private TextMeshProUGUI _text;
 
         private void Awake()
@@ -201,6 +203,7 @@ namespace OneManJourney.Runtime
             _battleEnemyTurnResolvedSubscription = _eventBus.Subscribe<BattleEnemyTurnResolvedEvent>(HandleBattleEnemyTurnResolved);
             _battleCardsDrawnSubscription = _eventBus.Subscribe<BattleCardsDrawnEvent>(HandleBattleCardsDrawn);
             _battleFlowEndedSubscription = _eventBus.Subscribe<BattleFlowEndedEvent>(HandleBattleFlowEnded);
+            _battleSettledSubscription = _eventBus.Subscribe<BattleSettledEvent>(HandleBattleSettled);
             return true;
         }
 
@@ -225,6 +228,8 @@ namespace OneManJourney.Runtime
             _battleCardsDrawnSubscription?.Dispose();
             _battleFlowEndedSubscription?.Dispose();
 
+            _battleSettledSubscription?.Dispose();
+
             _resourceChangedSubscription = null;
             _nodeSelectedSubscription = null;
             _cardDrawnSubscription = null;
@@ -243,6 +248,7 @@ namespace OneManJourney.Runtime
             _battleEnemyTurnResolvedSubscription = null;
             _battleCardsDrawnSubscription = null;
             _battleFlowEndedSubscription = null;
+            _battleSettledSubscription = null;
             _eventBus = null;
         }
 
@@ -333,6 +339,12 @@ namespace OneManJourney.Runtime
 
         private void HandleBattleFlowEnded(BattleFlowEndedEvent _)
         {
+            Refresh();
+        }
+
+        private void HandleBattleSettled(BattleSettledEvent evt)
+        {
+            _lastBattleSettledEvent = evt;
             Refresh();
         }
 
@@ -586,6 +598,48 @@ namespace OneManJourney.Runtime
                 }
 
                 _builder.AppendLine($"  - {card.DisplayName} ({card.EnergyCost})");
+            }
+
+            if (_lastBattleSettledEvent.HasValue)
+            {
+                BattleSettledEvent settled = _lastBattleSettledEvent.Value;
+                _builder.AppendLine();
+                _builder.AppendLine("Last Settlement:");
+                string outcome = settled.IsVictory ? "VICTORY" : "DEFEAT";
+                _builder.AppendLine($"- Outcome: {outcome} (Node {settled.NodeId}, Turn {settled.TurnNumber})");
+                _builder.AppendLine($"- Summary: {settled.SettlementSummary}");
+
+                if (settled.Rewards.Count > 0)
+                {
+                    _builder.Append("- Rewards: ");
+                    for (int i = 0; i < settled.Rewards.Count; i++)
+                    {
+                        if (i > 0) _builder.Append(", ");
+                        _builder.Append($"+{settled.Rewards[i].Amount} {settled.Rewards[i].Type}");
+                    }
+                    _builder.AppendLine();
+                }
+
+                if (settled.ResourcesLost.Count > 0)
+                {
+                    _builder.Append("- Resources Lost: ");
+                    for (int i = 0; i < settled.ResourcesLost.Count; i++)
+                    {
+                        if (i > 0) _builder.Append(", ");
+                        _builder.Append($"-{settled.ResourcesLost[i].Amount} {settled.ResourcesLost[i].Type}");
+                    }
+                    _builder.AppendLine();
+                }
+
+                if (settled.CardsDiscardedCount > 0)
+                {
+                    _builder.AppendLine($"- Cards Lost: {settled.CardsDiscardedCount}");
+                }
+
+                if (settled.CompanionInjured)
+                {
+                    _builder.AppendLine("- Companion Injured: Yes");
+                }
             }
         }
 

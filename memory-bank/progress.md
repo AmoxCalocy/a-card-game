@@ -145,3 +145,23 @@
   - `EnemyTurnResolved` 的 `result` 表示“实际生效值（effective）”；
   - 二者按同一 `turn` 对齐，允许出现 `effective <= planned`（如护甲吸收、资源不足、目标已死亡）。
 - 验证结论：第13步验收通过；在你后续明确指令前不开始第14步。
+
+2026-05-14：完成实施计划第14步（战斗结算）并验证通过（由测试执行）
+- 在 `Assets/Scripts/Core/GameEventMessages.cs` 新增 `BattleSettledEvent`（IsVictory、Rewards、ResourcesLost、CardsDiscardedCount、CompanionInjured、SettlementSummary），作为结算结果的唯一事件契约。
+- 在 `Assets/Scripts/Core/GameContext.cs` 新增 `TryRemoveRandomCard(out CardConfig)`，从卡池中随机移除一张牌，供失败弃牌惩罚使用。
+- 在 `Assets/Scripts/Core/BattleTurnController.cs` 实现结算核心：
+  - 新增检查器参数：`_defeatWealthLossPercent`（30%）、`_defeatFoodLossPercent`（20%）、`_defeatCardsLostCount`（1）。
+  - 新增 `CheckBattleOutcome()`：打出卡牌后及敌方回合结束后调用，检测全部敌人阵亡（胜利）或玩家阵亡（失败）。
+  - 新增 `ResolveVictory()`：遍历全部敌人状态，汇总 `EnemyConfig.DefeatRewards`，通过 `GameContext.AddResource` 发放，发布 `BattleSettledEvent`，调用 `EndBattleFlow("Victory")`。
+  - 新增 `ResolveDefeat()`：按百分比扣除财富/粮食，随机移除卡牌，发布 `BattleSettledEvent`，调用 `EndBattleFlow("Defeat")`。
+  - 在 `TryPlayCard` 中接入胜利检测（打出卡牌后立即检测，击败最后一个敌人即刻胜利）。
+  - 在 `TryEndPlayerTurn` 中接入失败检测（敌方回合结算后检测，仅在未结束时开始下一回合）。
+- 在 `Assets/Scripts/Core/GameContextDebugPanel.cs` 新增结算观测区（Last Settlement），战斗结束后持续可见；包含结局、摘要、奖励、损失、弃牌数。
+- 在 `Assets/Scripts/Core/GameContextStep8TestDriver.cs` 新增 `BattleSettledEvent` 订阅，输出结算日志及 `FormatResourceAmounts` 工具方法。
+- 更新 `Assets/Data/TestStep4/EnemyConfig.asset`：测试敌人战利品设为 +10 Food、+5 Wealth（原值为 0，导致奖励不可见）。
+- 关键设计决策：
+  - 结算在 `EndBattleFlow` 清空状态前发布事件，确保订阅方可访问战斗数据。
+  - 战利品包含已击败和刚击败的全部敌人（`_enemyStates` 不清理已击败单位）。
+  - 失败为二元结果，不给部分奖励；弃牌从持久化 `GameContext.CardPool` 移除（非临时战斗牌堆）。
+  - `CompanionInjured` 硬编码为 `false`，作为第15-17步伙伴系统的占位钩子。
+- 验证结论：第14步验收通过（胜利后资源增加、失败后资源/卡牌减少均符合规则）；按约束未开始第15步。

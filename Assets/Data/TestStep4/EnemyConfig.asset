@@ -21,6 +21,6 @@ MonoBehaviour:
   _primaryIntent: 0
   _defeatRewards:
   - Type: 0
-    Amount: 0
-  - Type: 0
-    Amount: 0
+    Amount: 10
+  - Type: 1
+    Amount: 5

@@ -424,6 +424,21 @@ namespace OneManJourney.Runtime
             return true;
         }
 
+        public bool TryRemoveRandomCard(out CardConfig removedCard)
+        {
+            if (_cardPool.Count == 0)
+            {
+                removedCard = null;
+                return false;
+            }
+
+            int index = UnityEngine.Random.Range(0, _cardPool.Count);
+            removedCard = _cardPool[index];
+            _cardPool.RemoveAt(index);
+            NotifyStateChanged();
+            return true;
+        }
+
         public void SetCardPool(IEnumerable<CardConfig> cards)
         {
             _cardPool.Clear();

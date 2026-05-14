@@ -32,6 +32,7 @@ namespace OneManJourney.Runtime
         private IDisposable _battleHandDiscardedSubscription;
         private IDisposable _battleEnemyTurnResolvedSubscription;
         private IDisposable _battleCardsDrawnSubscription;
+        private IDisposable _battleSettledSubscription;
 
         private void Awake()
         {
@@ -157,6 +158,7 @@ namespace OneManJourney.Runtime
                 _battleHandDiscardedSubscription = _eventBus.Subscribe<BattleHandDiscardedEvent>(HandleBattleHandDiscarded);
                 _battleEnemyTurnResolvedSubscription = _eventBus.Subscribe<BattleEnemyTurnResolvedEvent>(HandleBattleEnemyTurnResolved);
                 _battleCardsDrawnSubscription = _eventBus.Subscribe<BattleCardsDrawnEvent>(HandleBattleCardsDrawn);
+                _battleSettledSubscription = _eventBus.Subscribe<BattleSettledEvent>(HandleBattleSettled);
             }
 
             return true;
@@ -175,6 +177,7 @@ namespace OneManJourney.Runtime
             _battleHandDiscardedSubscription?.Dispose();
             _battleEnemyTurnResolvedSubscription?.Dispose();
             _battleCardsDrawnSubscription?.Dispose();
+            _battleSettledSubscription?.Dispose();
             _journeyNodeEnteredSubscription = null;
             _journeyNodeCompletedSubscription = null;
             _journeyAdvanceBlockedSubscription = null;
@@ -186,6 +189,7 @@ namespace OneManJourney.Runtime
             _battleHandDiscardedSubscription = null;
             _battleEnemyTurnResolvedSubscription = null;
             _battleCardsDrawnSubscription = null;
+            _battleSettledSubscription = null;
             _eventBus = null;
             _context = null;
             _battleTurnController = null;
@@ -286,6 +290,36 @@ namespace OneManJourney.Runtime
                 "Step11TestDriver Event: CardsDrawn " +
                 $"node={evt.NodeId}, turn={evt.TurnNumber}, requested={evt.RequestedCount}, drawn={evt.DrawnCount}, reshuffle={evt.ReshuffleCount}, " +
                 $"draw/hand/discard/exhaust={evt.DrawPileCount}/{evt.HandCount}/{evt.DiscardPileCount}/{evt.ExhaustPileCount}.");
+        }
+
+        private static void HandleBattleSettled(BattleSettledEvent evt)
+        {
+            string outcome = evt.IsVictory ? "VICTORY" : "DEFEAT";
+            Debug.Log(
+                $"Step14TestDriver Event: BattleSettled " +
+                $"outcome={outcome}, node={evt.NodeId}, turn={evt.TurnNumber}, " +
+                $"rewards=[{FormatResourceAmounts(evt.Rewards)}], " +
+                $"lost=[{FormatResourceAmounts(evt.ResourcesLost)}], " +
+                $"cardsDiscarded={evt.CardsDiscardedCount}, " +
+                $"companionInjured={evt.CompanionInjured}, " +
+                $"summary='{evt.SettlementSummary}'.");
+        }
+
+        private static string FormatResourceAmounts(IReadOnlyList<ResourceAmount> amounts)
+        {
+            if (amounts == null || amounts.Count == 0)
+            {
+                return "none";
+            }
+
+            string[] entries = new string[amounts.Count];
+            for (int i = 0; i < amounts.Count; i++)
+            {
+                string sign = amounts[i].Amount >= 0 ? "+" : "";
+                entries[i] = $"{sign}{amounts[i].Amount} {amounts[i].Type}";
+            }
+
+            return string.Join(", ", entries);
         }
 
         private static string FormatEnemyQueue(IReadOnlyList<EnemyConfig> queue)

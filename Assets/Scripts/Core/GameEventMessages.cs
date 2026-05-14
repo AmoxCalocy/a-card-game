@@ -455,6 +455,38 @@ namespace OneManJourney.Runtime
         public int ExhaustPileCount { get; }
     }
 
+    public readonly struct BattleSettledEvent
+    {
+        public BattleSettledEvent(
+            int nodeId,
+            int turnNumber,
+            bool isVictory,
+            IReadOnlyList<ResourceAmount> rewards,
+            IReadOnlyList<ResourceAmount> resourcesLost,
+            int cardsDiscardedCount,
+            bool companionInjured,
+            string settlementSummary)
+        {
+            NodeId = nodeId;
+            TurnNumber = turnNumber;
+            IsVictory = isVictory;
+            Rewards = rewards ?? System.Array.Empty<ResourceAmount>();
+            ResourcesLost = resourcesLost ?? System.Array.Empty<ResourceAmount>();
+            CardsDiscardedCount = cardsDiscardedCount;
+            CompanionInjured = companionInjured;
+            SettlementSummary = settlementSummary ?? string.Empty;
+        }
+
+        public int NodeId { get; }
+        public int TurnNumber { get; }
+        public bool IsVictory { get; }
+        public IReadOnlyList<ResourceAmount> Rewards { get; }
+        public IReadOnlyList<ResourceAmount> ResourcesLost { get; }
+        public int CardsDiscardedCount { get; }
+        public bool CompanionInjured { get; }
+        public string SettlementSummary { get; }
+    }
+
     public readonly struct JourneyNodeEnteredEvent
     {
         public JourneyNodeEnteredEvent(int previousNodeId, int targetNodeId, JourneyNodeType nodeType, string sceneName)
