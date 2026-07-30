@@ -60,8 +60,8 @@ namespace OneManJourney.Runtime
         private string _lastDisasterTriggerMessage = string.Empty;
         private int _nextDisasterTriggerThreshold;
         private BattleEncounterConfig _activeBattleEncounterConfig;
-        private readonly List<CompanionConfig> _activeCompanions = new List<CompanionConfig>();
-        private readonly List<CompanionConfig> _companionReserve = new List<CompanionConfig>();
+        private readonly List<CompanionState> _activeCompanions = new List<CompanionState>();
+        private readonly List<CompanionState> _companionReserve = new List<CompanionState>();
         public const int MaxActiveCompanions = 4;
 
         public static GameContext Instance { get; private set; }
@@ -90,8 +90,8 @@ namespace OneManJourney.Runtime
         public DisasterEventType PendingDisasterType => _pendingDisasterType;
         public string LastDisasterTriggerMessage => _lastDisasterTriggerMessage;
         public BattleEncounterConfig ActiveBattleEncounterConfig => _activeBattleEncounterConfig;
-        public IReadOnlyList<CompanionConfig> ActiveCompanions => _activeCompanions;
-        public IReadOnlyList<CompanionConfig> CompanionReserve => _companionReserve;
+        public IReadOnlyList<CompanionState> ActiveCompanions => _activeCompanions;
+        public IReadOnlyList<CompanionState> CompanionReserve => _companionReserve;
         // Avoid Unity API calls during MonoBehaviour construction/field initialization.
         public JourneyState JourneyState { get; private set; } = new JourneyState();
 
@@ -453,20 +453,21 @@ namespace OneManJourney.Runtime
                 return false;
             }
 
-            if (_activeCompanions.Contains(companion) || _companionReserve.Contains(companion))
+            if (TryFindCompanion(companion, out _))
             {
                 message = $"Companion '{companion.DisplayName}' is already recruited.";
                 return false;
             }
 
+            CompanionState companionState = new CompanionState(companion);
             bool addedToActive = _activeCompanions.Count < MaxActiveCompanions;
             if (addedToActive)
             {
-                _activeCompanions.Add(companion);
+                _activeCompanions.Add(companionState);
             }
             else
             {
-                _companionReserve.Add(companion);
+                _companionReserve.Add(companionState);
             }
 
             int cardsAdded = 0;
@@ -489,16 +490,126 @@ namespace OneManJourney.Runtime
             string summary = $"Recruited '{companion.DisplayName}' ({companion.Role}) to {squadLabel}. Added {cardsAdded} starter card(s).";
 
             Publish(new CompanionRecruitedEvent(
-                companion,
+                companionState,
                 _activeCompanions.Count,
                 _companionReserve.Count,
                 cardsAdded,
                 addedToActive,
                 summary));
 
-            Debug.Log($"Step15: {summary}");
+            Debug.Log($"Step16: {summary}");
             NotifyStateChanged();
             message = string.Empty;
+            return true;
+        }
+
+        public bool TryFindCompanion(CompanionConfig config, out CompanionState state)
+        {
+            for (int i = 0; i < _activeCompanions.Count; i++)
+            {
+                if (_activeCompanions[i].Config == config)
+                {
+                    state = _activeCompanions[i];
+                    return true;
+                }
+            }
+
+            for (int i = 0; i < _companionReserve.Count; i++)
+            {
+                if (_companionReserve[i].Config == config)
+                {
+                    state = _companionReserve[i];
+                    return true;
+                }
+            }
+
+            state = null;
+            return false;
+        }
+
+        public int ModifyCompanionLoyalty(CompanionState companion, int delta, string reason)
+        {
+            if (companion == null) return 0;
+
+            int previous = companion.CurrentLoyalty;
+            int actualDelta = companion.ModifyLoyalty(delta);
+            int newValue = companion.CurrentLoyalty;
+
+            Publish(new CompanionLoyaltyChangedEvent(companion, previous, newValue, actualDelta, reason));
+            NotifyStateChanged();
+
+            if (companion.ShouldAutoDepart)
+            {
+                CheckCompanionDeparture(companion, out _);
+            }
+            else if (companion.IsLoyaltyWarning || companion.IsLoyaltyCritical)
+            {
+                string warning = $"{companion.DisplayName} is {companion.GetLoyaltyLabel()} (Loyalty: {newValue}, Departure Risk: {companion.DepartureRisk:P0}).";
+                Publish(new CompanionDepartureWarningEvent(companion, companion.DepartureRisk, warning));
+            }
+
+            return actualDelta;
+        }
+
+        public bool TryCompanionSkillCheck(CompanionState companion, int difficulty, out CompanionSkillCheckEvent result)
+        {
+            if (companion == null)
+            {
+                result = default;
+                return false;
+            }
+
+            int skillValue = companion.GetSkillCheckValue();
+            int roll = UnityEngine.Random.Range(1, 21);
+            int total = skillValue + roll;
+            bool success = total >= difficulty;
+
+            string traitUsed = companion.TraitIds.Count > 0
+                ? companion.TraitIds[UnityEngine.Random.Range(0, companion.TraitIds.Count)]
+                : "None";
+
+            result = new CompanionSkillCheckEvent(companion, difficulty, roll, total, success, traitUsed);
+            Publish(result);
+            return success;
+        }
+
+        public bool CheckCompanionDeparture(CompanionState companion, out string departureMessage)
+        {
+            departureMessage = string.Empty;
+            if (companion == null) return false;
+
+            if (companion.ShouldAutoDepart)
+            {
+                departureMessage = $"{companion.DisplayName} has abandoned the journey (Loyalty reached 0).";
+                return TryRemoveCompanion(companion, departureMessage);
+            }
+
+            if (companion.DepartureRisk > 0f)
+            {
+                float roll = UnityEngine.Random.value;
+                if (roll < companion.DepartureRisk)
+                {
+                    departureMessage = $"{companion.DisplayName} has left the party (Loyalty: {companion.CurrentLoyalty}, Risk: {companion.DepartureRisk:P0}).";
+                    return TryRemoveCompanion(companion, departureMessage);
+                }
+            }
+
+            return false;
+        }
+
+        public bool TryRemoveCompanion(CompanionState companion, string departureReason)
+        {
+            if (companion == null) return false;
+
+            bool wasInActiveSquad = _activeCompanions.Remove(companion);
+            if (!wasInActiveSquad)
+            {
+                _companionReserve.Remove(companion);
+            }
+
+            Publish(new CompanionDepartedEvent(companion, wasInActiveSquad, departureReason));
+            Debug.Log($"Step16: {departureReason}");
+            NotifyStateChanged();
             return true;
         }
 

@@ -35,6 +35,10 @@ namespace OneManJourney.Runtime
         private IDisposable _battleFlowEndedSubscription;
         private IDisposable _battleSettledSubscription;
         private IDisposable _companionRecruitedSubscription;
+        private IDisposable _companionLoyaltyChangedSubscription;
+        private IDisposable _companionDepartureWarningSubscription;
+        private IDisposable _companionDepartedSubscription;
+        private IDisposable _companionSkillCheckSubscription;
         private BattleSettledEvent? _lastBattleSettledEvent;
         private TextMeshProUGUI _text;
 
@@ -209,6 +213,10 @@ namespace OneManJourney.Runtime
             _battleFlowEndedSubscription = _eventBus.Subscribe<BattleFlowEndedEvent>(HandleBattleFlowEnded);
             _battleSettledSubscription = _eventBus.Subscribe<BattleSettledEvent>(HandleBattleSettled);
             _companionRecruitedSubscription = _eventBus.Subscribe<CompanionRecruitedEvent>(HandleCompanionRecruited);
+            _companionLoyaltyChangedSubscription = _eventBus.Subscribe<CompanionLoyaltyChangedEvent>(HandleCompanionLoyaltyChanged);
+            _companionDepartureWarningSubscription = _eventBus.Subscribe<CompanionDepartureWarningEvent>(HandleCompanionDepartureWarning);
+            _companionDepartedSubscription = _eventBus.Subscribe<CompanionDepartedEvent>(HandleCompanionDeparted);
+            _companionSkillCheckSubscription = _eventBus.Subscribe<CompanionSkillCheckEvent>(HandleCompanionSkillCheck);
             return true;
         }
 
@@ -235,6 +243,10 @@ namespace OneManJourney.Runtime
 
             _battleSettledSubscription?.Dispose();
             _companionRecruitedSubscription?.Dispose();
+            _companionLoyaltyChangedSubscription?.Dispose();
+            _companionDepartureWarningSubscription?.Dispose();
+            _companionDepartedSubscription?.Dispose();
+            _companionSkillCheckSubscription?.Dispose();
 
             _resourceChangedSubscription = null;
             _nodeSelectedSubscription = null;
@@ -256,6 +268,10 @@ namespace OneManJourney.Runtime
             _battleFlowEndedSubscription = null;
             _battleSettledSubscription = null;
             _companionRecruitedSubscription = null;
+            _companionLoyaltyChangedSubscription = null;
+            _companionDepartureWarningSubscription = null;
+            _companionDepartedSubscription = null;
+            _companionSkillCheckSubscription = null;
             _eventBus = null;
         }
 
@@ -356,6 +372,26 @@ namespace OneManJourney.Runtime
         }
 
         private void HandleCompanionRecruited(CompanionRecruitedEvent _)
+        {
+            Refresh();
+        }
+
+        private void HandleCompanionLoyaltyChanged(CompanionLoyaltyChangedEvent _)
+        {
+            Refresh();
+        }
+
+        private void HandleCompanionDepartureWarning(CompanionDepartureWarningEvent _)
+        {
+            Refresh();
+        }
+
+        private void HandleCompanionDeparted(CompanionDepartedEvent _)
+        {
+            Refresh();
+        }
+
+        private void HandleCompanionSkillCheck(CompanionSkillCheckEvent _)
         {
             Refresh();
         }
@@ -867,9 +903,11 @@ namespace OneManJourney.Runtime
                 _builder.AppendLine("- Active Squad:");
                 for (int i = 0; i < context.ActiveCompanions.Count; i++)
                 {
-                    CompanionConfig companion = context.ActiveCompanions[i];
+                    CompanionState companion = context.ActiveCompanions[i];
                     int starterCount = companion.StarterCards?.Count ?? 0;
-                    _builder.AppendLine($"  [{i}] {companion.DisplayName} ({companion.Role}) HP={companion.MaxHealth} Loyalty={companion.StartingLoyalty} Cards={starterCount}");
+                    string traits = companion.TraitIds.Count > 0 ? string.Join(", ", companion.TraitIds) : "None";
+                    _builder.AppendLine($"  [{i}] {companion.GetStatusSummary()}");
+                    _builder.AppendLine($"       Traits: {traits}  Cards: {starterCount}  SkillBonus: {companion.SkillCheckBonus}");
                 }
             }
 
@@ -878,8 +916,8 @@ namespace OneManJourney.Runtime
                 _builder.AppendLine("- Reserve:");
                 for (int i = 0; i < context.CompanionReserve.Count; i++)
                 {
-                    CompanionConfig companion = context.CompanionReserve[i];
-                    _builder.AppendLine($"  [{i}] {companion.DisplayName} ({companion.Role})");
+                    CompanionState companion = context.CompanionReserve[i];
+                    _builder.AppendLine($"  [{i}] {companion.GetStatusSummary()}");
                 }
             }
         }

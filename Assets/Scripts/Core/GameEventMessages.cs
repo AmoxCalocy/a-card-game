@@ -540,7 +540,7 @@ namespace OneManJourney.Runtime
     public readonly struct CompanionRecruitedEvent
     {
         public CompanionRecruitedEvent(
-            CompanionConfig companion,
+            CompanionState companion,
             int activeCompanionCount,
             int reserveCompanionCount,
             int starterCardsAdded,
@@ -555,12 +555,95 @@ namespace OneManJourney.Runtime
             Summary = summary ?? string.Empty;
         }
 
-        public CompanionConfig Companion { get; }
+        public CompanionState Companion { get; }
         public int ActiveCompanionCount { get; }
         public int ReserveCompanionCount { get; }
         public int StarterCardsAdded { get; }
         public bool AddedToActive { get; }
         public string Summary { get; }
+    }
+
+    public readonly struct CompanionLoyaltyChangedEvent
+    {
+        public CompanionLoyaltyChangedEvent(
+            CompanionState companion,
+            int previousLoyalty,
+            int newLoyalty,
+            int delta,
+            string reason)
+        {
+            Companion = companion;
+            PreviousLoyalty = previousLoyalty;
+            NewLoyalty = newLoyalty;
+            Delta = delta;
+            Reason = reason ?? string.Empty;
+        }
+
+        public CompanionState Companion { get; }
+        public int PreviousLoyalty { get; }
+        public int NewLoyalty { get; }
+        public int Delta { get; }
+        public string Reason { get; }
+    }
+
+    public readonly struct CompanionDepartureWarningEvent
+    {
+        public CompanionDepartureWarningEvent(
+            CompanionState companion,
+            float departureRisk,
+            string warningMessage)
+        {
+            Companion = companion;
+            DepartureRisk = departureRisk;
+            WarningMessage = warningMessage ?? string.Empty;
+        }
+
+        public CompanionState Companion { get; }
+        public float DepartureRisk { get; }
+        public string WarningMessage { get; }
+    }
+
+    public readonly struct CompanionDepartedEvent
+    {
+        public CompanionDepartedEvent(
+            CompanionState companion,
+            bool wasInActiveSquad,
+            string departureReason)
+        {
+            Companion = companion;
+            WasInActiveSquad = wasInActiveSquad;
+            DepartureReason = departureReason ?? string.Empty;
+        }
+
+        public CompanionState Companion { get; }
+        public bool WasInActiveSquad { get; }
+        public string DepartureReason { get; }
+    }
+
+    public readonly struct CompanionSkillCheckEvent
+    {
+        public CompanionSkillCheckEvent(
+            CompanionState companion,
+            int difficulty,
+            int roll,
+            int total,
+            bool success,
+            string traitUsed)
+        {
+            Companion = companion;
+            Difficulty = difficulty;
+            Roll = roll;
+            Total = total;
+            Success = success;
+            TraitUsed = traitUsed ?? string.Empty;
+        }
+
+        public CompanionState Companion { get; }
+        public int Difficulty { get; }
+        public int Roll { get; }
+        public int Total { get; }
+        public bool Success { get; }
+        public string TraitUsed { get; }
     }
 
     public readonly struct CrisisDisasterTriggeredEvent

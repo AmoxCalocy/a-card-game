@@ -473,10 +473,9 @@
   - 重复招募被拒绝：基于列表包含判重，返回 false 并输出错误日志。
 
 - 边界与后续：
-  - 本层仅实现"招募与卡牌注入"，未包含伙伴在战斗中的出战、伙伴专属牌堆、忠诚度与离队逻辑（第16步范围）。
-  - `CompanionInjured` 在第14步已预留钩子，第16步伙伴忠诚与受伤系统将消费该钩子。
+  - 本层仅实现"招募与卡牌注入"，未包含伙伴在战斗中的出战、伙伴专属牌堆（第17步范围）。
   - 后备伙伴暂不参与任何战斗/检定/事件流程，仅作为"已招募但未上阵"的状态标记。
-  - 当前未实现伙伴离队、交换、装备与特质激活等编排操作（第17步范围）。
+  - 当前未实现伙伴交换、装备与特质激活等编排操作（第17步范围）。
 
 ## 第15步验证状态（2026-07-30）
 - 验证环境：Unity 2022.3.62f3，`Assets/Scenes/SampleScene.unity`。
@@ -486,3 +485,59 @@
   - 每次招募后卡池计数增加对应起始卡牌数，调试面板即时刷新。
   - 第 7 次招募（循环至已招募伙伴）被拒绝并输出错误日志。
   - 验证结论：第15步验收通过。
+
+## 伙伴特质与忠诚度层（2026-07-30，实施计划第16步）
+- 目标：将伙伴从"静态配置引用"升级为"带运行时状态的完整模型"，形成"忠诚度变化 -> 警告/自动离队 -> 技能检定"的可观测闭环。
+- 关键架构洞察：
+  - 引入 `CompanionState` 运行时包装器，替代直接存储 `CompanionConfig` 引用，统一管理忠诚度、生命、受伤、离队风险等运行时字段。
+  - 忠诚度阈值驱动四级状态标签（Loyal ≥60 / Uneasy 30-59 / Discontent 1-29 / Rebellious 0），每级对应不同的离队概率（0%/15%/40%/100%）和技能检定修正（+2/0/-2/-5）。
+  - 离队机制采用"自动触发 + 概率判定"双层策略：忠诚度归零立即离队，警告/危险区间通过 `CheckCompanionDeparture` 按概率判定。
+  - 技能检定采用 d20 + 技能值 vs DC 经典模型，技能值 = `SkillCheckBonus` + 忠诚度修正；检定时随机选择一个特质 ID 作为 flavor 输出。
+
+- 文件职责（第16步相关）：
+  - `Assets/Scripts/Core/CompanionState.cs`
+    - 运行时伙伴状态模型：封装 `CompanionConfig` 引用，管理 `CurrentLoyalty`（0-100）、`CurrentHealth`、`IsInjured`。
+    - 提供四级忠诚度标签（`GetLoyaltyLabel()`）与离队风险（`DepartureRisk`）。
+    - 提供 `GetSkillCheckValue()`：`SkillCheckBonus` + 忠诚度修正。
+    - 提供 `GetStatusSummary()`：统一调试输出格式。
+  - `Assets/Scripts/Core/GameEventMessages.cs`
+    - 扩展 `CompanionRecruitedEvent`：载荷从 `CompanionConfig` 改为 `CompanionState`。
+    - 新增 `CompanionLoyaltyChangedEvent`（前后值、delta、原因）。
+    - 新增 `CompanionDepartureWarningEvent`（离队风险、警告消息）。
+    - 新增 `CompanionDepartedEvent`（是否曾为激活队员、离队原因）。
+    - 新增 `CompanionSkillCheckEvent`（难度、d20、技能值、成功/失败、使用的特质）。
+  - `Assets/Scripts/Core/GameContext.cs`
+    - 升级伙伴存储：`_activeCompanions`/`_companionReserve` 从 `List<CompanionConfig>` 改为 `List<CompanionState>`。
+    - 新增 `TryFindCompanion(CompanionConfig, out CompanionState)`：按配置查找运行时状态。
+    - 新增 `ModifyCompanionLoyalty(state, delta, reason)`：修改忠诚度，归零自动离队，警告区间发布警告。
+    - 新增 `TryCompanionSkillCheck(state, difficulty, out result)`：d20 检定。
+    - 新增 `CheckCompanionDeparture(state, out message)`：按风险概率判定离队。
+    - 新增 `TryRemoveCompanion(state, reason)`：从队伍移除并发布离队事件。
+  - `Assets/Scripts/Core/GameContextDebugPanel.cs`
+    - 升级 `AppendCompanionSummary()`：显示运行时状态（HP、忠诚度标签、离队风险、特质、技能值）。
+    - 新增 4 个事件订阅：LoyaltyChanged、DepartureWarning、Departed、SkillCheck。
+  - `Assets/Scripts/Core/GameContextStep15TestDriver.cs`
+    - 升级为 Step15+16 联合驱动，GUI 尺寸 260→400。
+    - 新增热键：`[+]/[-]` 增减忠诚度、`K` 技能检定、`L` 离队判定、`1`/`2` 切换选中伙伴。
+    - GUI 显示每个伙伴的忠诚度/标签/风险和选中伙伴详细属性。
+
+- 生命周期与数据流（第16步）：
+  - 招募时：`TryRecruitCompanion` 创建 `CompanionState` 实例。
+  - 忠诚度变化：`ModifyCompanionLoyalty` → 修改 `CurrentLoyalty` → 发布 `CompanionLoyaltyChangedEvent` → 若归零自动调用 `CheckCompanionDeparture` → 否则在警告/危险区间发布 `CompanionDepartureWarningEvent`。
+  - 离队判定：`CheckCompanionDeparture` → 若 `ShouldAutoDepart` 直接移除 → 否则按 `DepartureRisk` 随机判定 → 调用 `TryRemoveCompanion` → 发布 `CompanionDepartedEvent`。
+  - 技能检定：`TryCompanionSkillCheck` → 计算 `GetSkillCheckValue() + d20` → 对比 `difficulty` → 随机选择特质 → 发布 `CompanionSkillCheckEvent`。
+
+- 边界与后续：
+  - `CompanionInjured` 字段已定义但战斗结算仍未消费该钩子，后续可在战斗失败时写入。
+  - 特质以 ID 字符串存储，检定时随机选取作为 flavor，未实现特质间联动规则（第17步范围）。
+  - 离队后伙伴起始卡牌不从卡池移除，后续可考虑是否应随离队清理。
+
+## 第16步验证状态（2026-07-30）
+- 验证环境：Unity 2022.3.62f3，`Assets/Scenes/BattleScene.unity`。
+- 验证方法：通过 `GameContextStep15TestDriver` 招募伙伴后使用 `[+]/[-]` 调整忠诚度、`K` 技能检定、`L` 离队判定；观察 Console 日志与调试面板。
+- 验证结果：
+  - 忠诚度降至 0 时自动触发离队（`CompanionDepartedEvent`），无额外操作。
+  - 忠诚度在 30-59 区间发布 `CompanionDepartureWarningEvent`，按概率触发离队。
+  - 技能检定输出 d20 结果与特质选择，成功/失败判定正确。
+  - 调试面板与 GUI 实时显示伙伴忠诚度、标签、离队风险和技能值。
+  - 验证结论：第16步验收通过。

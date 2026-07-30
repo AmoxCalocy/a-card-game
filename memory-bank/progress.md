@@ -182,3 +182,30 @@
   - 伙伴起始卡牌直接加入 `GameContext.CardPool`（持久卡池），不在战斗牌堆中，确保招募效果跨战斗持续。
   - `CompanionInjured` 在第14步已预留钩子，第16步伙伴忠诚与受伤系统将消费此钩子。
 - 验证结论：第15步验收通过（招募后伙伴进入激活/后备正确，卡池自动增加起始卡牌，重复招募被拒绝并显示错误日志）；按约束未开始第16步。
+
+2026-07-30：完成实施计划第16步（伙伴特质与忠诚度）并验证通过（由测试执行）
+- 新增 `Assets/Scripts/Core/CompanionState.cs`：运行时伙伴状态模型，封装 `CompanionConfig` 并管理 `CurrentLoyalty`（0-100）、`CurrentHealth`、`IsInjured`；提供四级忠诚度标签（Loyal ≥60 / Uneasy 30-59 / Discontent 1-29 / Rebellious 0）、离队风险计算（0%/15%/40%/100%）、忠诚度修正技能检定值（+2/0/-2/-5）。
+- 在 `Assets/Scripts/Core/GameEventMessages.cs` 扩展事件体系：
+  - `CompanionRecruitedEvent` 载荷从 `CompanionConfig` 升级为 `CompanionState`。
+  - 新增 `CompanionLoyaltyChangedEvent`（前后忠诚度、delta、原因）。
+  - 新增 `CompanionDepartureWarningEvent`（离队风险、警告消息）。
+  - 新增 `CompanionDepartedEvent`（是否曾为激活队员、离队原因）。
+  - 新增 `CompanionSkillCheckEvent`（d20、技能值、DC、使用的特质、成功/失败）。
+- 重构 `Assets/Scripts/Core/GameContext.cs` 伙伴系统：
+  - `_activeCompanions` 与 `_companionReserve` 从 `List<CompanionConfig>` 改为 `List<CompanionState>`，公开属性同步更新。
+  - 新增 `TryFindCompanion(CompanionConfig, out CompanionState)`：按配置引用查找运行时状态。
+  - 新增 `ModifyCompanionLoyalty(state, delta, reason)`：修改忠诚度后自动检测归零离队或发布警告。
+  - 新增 `TryCompanionSkillCheck(state, difficulty, out result)`：d20 + 技能值 vs DC 检定。
+  - 新增 `CheckCompanionDeparture(state, out message)`：按离队风险随机判定。
+  - 新增 `TryRemoveCompanion(state, reason)`：从队伍移除并发布离队事件。
+- 升级 `Assets/Scripts/Core/GameContextDebugPanel.cs`：伙伴区域改为显示运行时状态（HP、忠诚度标签、离队风险、特质列表、技能加值）；新增 4 个事件订阅（LoyaltyChanged/DepartureWarning/Departed/SkillCheck）。
+- 升级 `Assets/Scripts/Core/GameContextStep15TestDriver.cs` 为 Step15+16 联合驱动：
+  - 新增 Step16 热键：`[+]/[-]`（小键盘）增减选中伙伴忠诚度 10 点、`K` 技能检定、`L` 离队判定、`1/2` 切换选中伙伴。
+  - GUI 面板增大（260→400），显示每个伙伴的忠诚度/标签/风险和选中伙伴详细属性。
+  - 新增 4 个事件日志输出。
+- 关键设计决策：
+  - 忠诚度归零立即自动离队（`ShouldAutoDepart`），不需要额外手动操作。
+  - 离队风险判定采用随机 roll vs `DepartureRisk` 概率，仅在主动调用 `CheckCompanionDeparture` 时生效。
+  - 技能检定时随机选择一个伙伴特质 ID 作为 flavor 输出，后续可扩展为特质间联动规则。
+  - 离队后伙伴起始卡牌不从卡池移除，保持简化设计。
+- 验证结论：第16步验收通过（忠诚度归零自动离队、警告/危险区间概率离队、技能检定正确输出结果）；按约束未开始第17步。
