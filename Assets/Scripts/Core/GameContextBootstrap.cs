@@ -1,5 +1,4 @@
 using UnityEngine;
-using UnityEngine.EventSystems;
 
 namespace OneManJourney.Runtime
 {
@@ -8,8 +7,6 @@ namespace OneManJourney.Runtime
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void EnsureContext()
         {
-            EnsureEventSystem();
-
             GameContext context = FindContext();
             if (context == null)
             {
@@ -95,17 +92,6 @@ namespace OneManJourney.Runtime
             }
 
             return items[0];
-        }
-
-        private static void EnsureEventSystem()
-        {
-            if (EventSystem.current != null)
-            {
-                return;
-            }
-
-            GameObject eventSystemObject = new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
-            Object.DontDestroyOnLoad(eventSystemObject);
         }
 
     }

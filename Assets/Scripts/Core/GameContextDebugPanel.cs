@@ -38,9 +38,6 @@ namespace OneManJourney.Runtime
         private BattleSettledEvent? _lastBattleSettledEvent;
         private TextMeshProUGUI _text;
 
-        [SerializeField]
-        private GameObject _uiPrefab;
-
         private void Awake()
         {
             EnsureUi();
@@ -367,28 +364,6 @@ namespace OneManJourney.Runtime
                 return;
             }
 
-#if UNITY_EDITOR
-            if (_uiPrefab == null)
-            {
-                _uiPrefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/GameContextDebugCanvas.prefab");
-            }
-#endif
-
-            if (_uiPrefab != null)
-            {
-                GameObject instance = Instantiate(_uiPrefab, transform, false);
-                _text = instance.GetComponentInChildren<TextMeshProUGUI>();
-                if (_text != null)
-                {
-                    return;
-                }
-            }
-
-            BuildUiProgrammatically();
-        }
-
-        private void BuildUiProgrammatically()
-        {
             GameObject canvasObject = new GameObject("GameContextDebugCanvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
             canvasObject.transform.SetParent(transform, false);
             Canvas canvas = canvasObject.GetComponent<Canvas>();
@@ -399,59 +374,37 @@ namespace OneManJourney.Runtime
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1920f, 1080f);
 
-            // ScrollRect outer (defines position, size, background)
-            GameObject scrollRectObject = new GameObject("ScrollRect", typeof(RectTransform), typeof(Image), typeof(ScrollRect));
-            scrollRectObject.transform.SetParent(canvasObject.transform, false);
-            RectTransform scrollRectTr = scrollRectObject.GetComponent<RectTransform>();
-            scrollRectTr.anchorMin = new Vector2(0f, 0f);
-            scrollRectTr.anchorMax = new Vector2(0f, 1f);
-            scrollRectTr.pivot = new Vector2(0f, 1f);
-            scrollRectTr.anchoredPosition = new Vector2(16f, -16f);
-            scrollRectTr.sizeDelta = new Vector2(480f, -32f);
+            // Scroll viewport
+            GameObject panelObject = new GameObject("Panel", typeof(RectTransform), typeof(Image), typeof(RectMask2D));
+            panelObject.transform.SetParent(canvasObject.transform, false);
+            RectTransform panelRect = panelObject.GetComponent<RectTransform>();
+            panelRect.anchorMin = new Vector2(0f, 1f);
+            panelRect.anchorMax = new Vector2(0f, 1f);
+            panelRect.pivot = new Vector2(0f, 1f);
+            panelRect.anchoredPosition = new Vector2(16f, -16f);
+            panelRect.sizeDelta = new Vector2(480f, 840f);
 
-            Image bgImage = scrollRectObject.GetComponent<Image>();
-            bgImage.color = new Color(0.08f, 0.08f, 0.08f, 0.88f);
+            Image panelImage = panelObject.GetComponent<Image>();
+            panelImage.color = new Color(0.08f, 0.08f, 0.08f, 0.88f);
 
-            // Viewport (clips content)
-            GameObject viewportObject = new GameObject("Viewport", typeof(RectTransform), typeof(RectMask2D));
-            viewportObject.transform.SetParent(scrollRectObject.transform, false);
-            RectTransform viewportRect = viewportObject.GetComponent<RectTransform>();
-            viewportRect.anchorMin = Vector2.zero;
-            viewportRect.anchorMax = Vector2.one;
-            viewportRect.pivot = new Vector2(0f, 1f);
-            viewportRect.anchoredPosition = Vector2.zero;
-            viewportRect.sizeDelta = Vector2.zero;
+            // Text (also serves as ScrollRect content)
+            GameObject textObject = new GameObject("ContextText", typeof(RectTransform), typeof(TextMeshProUGUI), typeof(ContentSizeFitter));
+            textObject.transform.SetParent(panelObject.transform, false);
+            RectTransform textRect = textObject.GetComponent<RectTransform>();
+            textRect.anchorMin = new Vector2(0f, 1f);
+            textRect.anchorMax = new Vector2(1f, 1f);
+            textRect.pivot = new Vector2(0f, 1f);
+            textRect.anchoredPosition = Vector2.zero;
+            textRect.sizeDelta = new Vector2(0f, 0f);
 
-            // Content (grows with text)
-            GameObject contentObject = new GameObject("Content", typeof(RectTransform), typeof(VerticalLayoutGroup), typeof(ContentSizeFitter));
-            contentObject.transform.SetParent(viewportObject.transform, false);
-            RectTransform contentRect = contentObject.GetComponent<RectTransform>();
-            contentRect.anchorMin = new Vector2(0f, 1f);
-            contentRect.anchorMax = new Vector2(1f, 1f);
-            contentRect.pivot = new Vector2(0f, 1f);
-            contentRect.anchoredPosition = Vector2.zero;
-            contentRect.sizeDelta = new Vector2(0f, 0f);
+            ContentSizeFitter fitter = textObject.GetComponent<ContentSizeFitter>();
+            fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+            fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
-            VerticalLayoutGroup layoutGroup = contentObject.GetComponent<VerticalLayoutGroup>();
-            layoutGroup.childControlHeight = true;
-            layoutGroup.childForceExpandHeight = false;
-            layoutGroup.childControlWidth = true;
-            layoutGroup.childForceExpandWidth = true;
-            layoutGroup.spacing = 0f;
-            layoutGroup.padding = new RectOffset(12, 12, 12, 12);
-
-            ContentSizeFitter contentFitter = contentObject.GetComponent<ContentSizeFitter>();
-            contentFitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
-            contentFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-
-            // Text
-            GameObject textObject = new GameObject("ContextText", typeof(RectTransform), typeof(TextMeshProUGUI));
-            textObject.transform.SetParent(contentObject.transform, false);
-
-            // Wire up ScrollRect
-            ScrollRect scrollRect = scrollRectObject.GetComponent<ScrollRect>();
-            scrollRect.content = contentRect;
-            scrollRect.viewport = viewportRect;
+            // ScrollRect — text is both content and child of viewport
+            ScrollRect scrollRect = panelObject.AddComponent<ScrollRect>();
+            scrollRect.content = textRect;
+            scrollRect.viewport = panelRect;
             scrollRect.horizontal = false;
             scrollRect.vertical = true;
             scrollRect.movementType = ScrollRect.MovementType.Clamped;
@@ -464,7 +417,7 @@ namespace OneManJourney.Runtime
             _text.color = Color.white;
             _text.enableWordWrapping = true;
             _text.overflowMode = TextOverflowModes.Overflow;
-            _text.margin = Vector4.zero;
+            _text.margin = new Vector4(12f, 12f, 12f, 12f);
             _text.text = "GameContext Debug Panel";
         }
 
