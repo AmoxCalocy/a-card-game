@@ -60,6 +60,9 @@ namespace OneManJourney.Runtime
         private string _lastDisasterTriggerMessage = string.Empty;
         private int _nextDisasterTriggerThreshold;
         private BattleEncounterConfig _activeBattleEncounterConfig;
+        private readonly List<CompanionConfig> _activeCompanions = new List<CompanionConfig>();
+        private readonly List<CompanionConfig> _companionReserve = new List<CompanionConfig>();
+        public const int MaxActiveCompanions = 4;
 
         public static GameContext Instance { get; private set; }
 
@@ -87,6 +90,8 @@ namespace OneManJourney.Runtime
         public DisasterEventType PendingDisasterType => _pendingDisasterType;
         public string LastDisasterTriggerMessage => _lastDisasterTriggerMessage;
         public BattleEncounterConfig ActiveBattleEncounterConfig => _activeBattleEncounterConfig;
+        public IReadOnlyList<CompanionConfig> ActiveCompanions => _activeCompanions;
+        public IReadOnlyList<CompanionConfig> CompanionReserve => _companionReserve;
         // Avoid Unity API calls during MonoBehaviour construction/field initialization.
         public JourneyState JourneyState { get; private set; } = new JourneyState();
 
@@ -137,6 +142,7 @@ namespace OneManJourney.Runtime
             ResetJourneyEncounterState();
             ClearJourneyAdvanceBlockMessage();
             ResetDisasterState();
+            ResetCompanionState();
 
             _isInitialized = true;
             Initialized?.Invoke();
@@ -436,6 +442,63 @@ namespace OneManJourney.Runtime
             removedCard = _cardPool[index];
             _cardPool.RemoveAt(index);
             NotifyStateChanged();
+            return true;
+        }
+
+        public bool TryRecruitCompanion(CompanionConfig companion, out string message)
+        {
+            if (companion == null)
+            {
+                message = "Companion config is null.";
+                return false;
+            }
+
+            if (_activeCompanions.Contains(companion) || _companionReserve.Contains(companion))
+            {
+                message = $"Companion '{companion.DisplayName}' is already recruited.";
+                return false;
+            }
+
+            bool addedToActive = _activeCompanions.Count < MaxActiveCompanions;
+            if (addedToActive)
+            {
+                _activeCompanions.Add(companion);
+            }
+            else
+            {
+                _companionReserve.Add(companion);
+            }
+
+            int cardsAdded = 0;
+            IReadOnlyList<CardConfig> starterCards = companion.StarterCards;
+            for (int i = 0; i < starterCards.Count; i++)
+            {
+                CardConfig card = starterCards[i];
+                if (card == null)
+                {
+                    continue;
+                }
+
+                _cardPool.Add(card);
+                cardsAdded++;
+            }
+
+            string squadLabel = addedToActive
+                ? $"Active ({_activeCompanions.Count}/{MaxActiveCompanions})"
+                : $"Reserve ({_companionReserve.Count})";
+            string summary = $"Recruited '{companion.DisplayName}' ({companion.Role}) to {squadLabel}. Added {cardsAdded} starter card(s).";
+
+            Publish(new CompanionRecruitedEvent(
+                companion,
+                _activeCompanions.Count,
+                _companionReserve.Count,
+                cardsAdded,
+                addedToActive,
+                summary));
+
+            Debug.Log($"Step15: {summary}");
+            NotifyStateChanged();
+            message = string.Empty;
             return true;
         }
 
@@ -803,6 +866,12 @@ namespace OneManJourney.Runtime
             _pendingDisasterType = DisasterEventType.None;
             _lastDisasterTriggerMessage = string.Empty;
             _nextDisasterTriggerThreshold = CalculateNextDisasterThreshold(GetResource(ResourceType.Crisis));
+        }
+
+        private void ResetCompanionState()
+        {
+            _activeCompanions.Clear();
+            _companionReserve.Clear();
         }
 
         private int CalculateNextDisasterThreshold(int currentCrisis)

@@ -10,14 +10,14 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: ec84393830cb4fefb9b46775edfc420f, type: 3}
-  m_Name: CompanionConfig
-  m_EditorClassIdentifier: 
-  _id: companion.veteran_warrior
-  _displayName: "老兵"
-  _description: "身经百战的前军士兵，精通近战作战。"
-  _role: 0
-  _maxHealth: 30
-  _startingLoyalty: 60
+  m_Name: CompanionConfig_Guard
+  m_EditorClassIdentifier:
+  _id: companion.guard
+  _displayName: "护卫"
+  _description: "忠诚的盾卫，擅长保护队友。"
+  _role: 1
+  _maxHealth: 45
+  _startingLoyalty: 80
   _skillCheckBonus: 0
   _traitIds: []
   _starterCards:

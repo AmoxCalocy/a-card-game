@@ -10,15 +10,15 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: ec84393830cb4fefb9b46775edfc420f, type: 3}
-  m_Name: CompanionConfig
-  m_EditorClassIdentifier: 
-  _id: companion.veteran_warrior
-  _displayName: "老兵"
-  _description: "身经百战的前军士兵，精通近战作战。"
-  _role: 0
-  _maxHealth: 30
-  _startingLoyalty: 60
-  _skillCheckBonus: 0
+  m_Name: CompanionConfig_Diplomat
+  m_EditorClassIdentifier:
+  _id: companion.diplomat
+  _displayName: "使节"
+  _description: "前朝遗臣，精通交涉。"
+  _role: 4
+  _maxHealth: 25
+  _startingLoyalty: 40
+  _skillCheckBonus: 5
   _traitIds: []
   _starterCards:
   - {fileID: 11400000, guid: c3eb197fc9785944caff456ffb32781d, type: 2}

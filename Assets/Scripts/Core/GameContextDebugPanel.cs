@@ -34,6 +34,7 @@ namespace OneManJourney.Runtime
         private IDisposable _battleCardsDrawnSubscription;
         private IDisposable _battleFlowEndedSubscription;
         private IDisposable _battleSettledSubscription;
+        private IDisposable _companionRecruitedSubscription;
         private BattleSettledEvent? _lastBattleSettledEvent;
         private TextMeshProUGUI _text;
 
@@ -204,6 +205,7 @@ namespace OneManJourney.Runtime
             _battleCardsDrawnSubscription = _eventBus.Subscribe<BattleCardsDrawnEvent>(HandleBattleCardsDrawn);
             _battleFlowEndedSubscription = _eventBus.Subscribe<BattleFlowEndedEvent>(HandleBattleFlowEnded);
             _battleSettledSubscription = _eventBus.Subscribe<BattleSettledEvent>(HandleBattleSettled);
+            _companionRecruitedSubscription = _eventBus.Subscribe<CompanionRecruitedEvent>(HandleCompanionRecruited);
             return true;
         }
 
@@ -229,6 +231,7 @@ namespace OneManJourney.Runtime
             _battleFlowEndedSubscription?.Dispose();
 
             _battleSettledSubscription?.Dispose();
+            _companionRecruitedSubscription?.Dispose();
 
             _resourceChangedSubscription = null;
             _nodeSelectedSubscription = null;
@@ -249,6 +252,7 @@ namespace OneManJourney.Runtime
             _battleCardsDrawnSubscription = null;
             _battleFlowEndedSubscription = null;
             _battleSettledSubscription = null;
+            _companionRecruitedSubscription = null;
             _eventBus = null;
         }
 
@@ -348,6 +352,11 @@ namespace OneManJourney.Runtime
             Refresh();
         }
 
+        private void HandleCompanionRecruited(CompanionRecruitedEvent _)
+        {
+            Refresh();
+        }
+
         private void EnsureUi()
         {
             if (_text != null)
@@ -365,33 +374,50 @@ namespace OneManJourney.Runtime
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1920f, 1080f);
 
-            GameObject panelObject = new GameObject("Panel", typeof(RectTransform), typeof(Image));
+            // Scroll viewport
+            GameObject panelObject = new GameObject("Panel", typeof(RectTransform), typeof(Image), typeof(RectMask2D));
             panelObject.transform.SetParent(canvasObject.transform, false);
             RectTransform panelRect = panelObject.GetComponent<RectTransform>();
             panelRect.anchorMin = new Vector2(0f, 1f);
             panelRect.anchorMax = new Vector2(0f, 1f);
             panelRect.pivot = new Vector2(0f, 1f);
             panelRect.anchoredPosition = new Vector2(16f, -16f);
-            panelRect.sizeDelta = new Vector2(460f, 760f);
+            panelRect.sizeDelta = new Vector2(480f, 840f);
 
             Image panelImage = panelObject.GetComponent<Image>();
             panelImage.color = new Color(0.08f, 0.08f, 0.08f, 0.88f);
 
-            GameObject textObject = new GameObject("ContextText", typeof(RectTransform), typeof(TextMeshProUGUI));
+            // Text (also serves as ScrollRect content)
+            GameObject textObject = new GameObject("ContextText", typeof(RectTransform), typeof(TextMeshProUGUI), typeof(ContentSizeFitter));
             textObject.transform.SetParent(panelObject.transform, false);
             RectTransform textRect = textObject.GetComponent<RectTransform>();
-            textRect.anchorMin = Vector2.zero;
-            textRect.anchorMax = Vector2.one;
-            textRect.offsetMin = new Vector2(12f, 12f);
-            textRect.offsetMax = new Vector2(-12f, -12f);
+            textRect.anchorMin = new Vector2(0f, 1f);
+            textRect.anchorMax = new Vector2(1f, 1f);
+            textRect.pivot = new Vector2(0f, 1f);
+            textRect.anchoredPosition = Vector2.zero;
+            textRect.sizeDelta = new Vector2(0f, 0f);
+
+            ContentSizeFitter fitter = textObject.GetComponent<ContentSizeFitter>();
+            fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+            fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            // ScrollRect — text is both content and child of viewport
+            ScrollRect scrollRect = panelObject.AddComponent<ScrollRect>();
+            scrollRect.content = textRect;
+            scrollRect.viewport = panelRect;
+            scrollRect.horizontal = false;
+            scrollRect.vertical = true;
+            scrollRect.movementType = ScrollRect.MovementType.Clamped;
+            scrollRect.scrollSensitivity = 20f;
 
             _text = textObject.GetComponent<TextMeshProUGUI>();
             _text.font = ResolveDebugFont();
-            _text.fontSize = 16f;
+            _text.fontSize = 15f;
             _text.alignment = TextAlignmentOptions.TopLeft;
             _text.color = Color.white;
             _text.enableWordWrapping = true;
             _text.overflowMode = TextOverflowModes.Overflow;
+            _text.margin = new Vector4(12f, 12f, 12f, 12f);
             _text.text = "GameContext Debug Panel";
         }
 
@@ -481,6 +507,8 @@ namespace OneManJourney.Runtime
                     _builder.AppendLine($"- {gameEvent.DisplayName} ({gameEvent.Id})");
                 }
             }
+
+            AppendCompanionSummary(_context);
 
             _text.text = _builder.ToString();
         }
@@ -774,6 +802,39 @@ namespace OneManJourney.Runtime
             _builder.AppendLine($"- Routes: {journeyMap.RouteCount}");
             _builder.AppendLine($"- Branching Nodes: {journeyMap.BranchingNodeCount}");
             _builder.AppendLine($"- Battle/Event/Supply/Boss: {journeyMap.GetTypeCount(JourneyNodeType.Battle)}/{journeyMap.GetTypeCount(JourneyNodeType.Event)}/{journeyMap.GetTypeCount(JourneyNodeType.Supply)}/{journeyMap.GetTypeCount(JourneyNodeType.Boss)}");
+        }
+
+        private void AppendCompanionSummary(GameContext context)
+        {
+            _builder.AppendLine();
+            _builder.AppendLine($"Companions (Active: {context.ActiveCompanions.Count}/{GameContext.MaxActiveCompanions}, Reserve: {context.CompanionReserve.Count}):");
+
+            if (context.ActiveCompanions.Count == 0 && context.CompanionReserve.Count == 0)
+            {
+                _builder.AppendLine("- None");
+                return;
+            }
+
+            if (context.ActiveCompanions.Count > 0)
+            {
+                _builder.AppendLine("- Active Squad:");
+                for (int i = 0; i < context.ActiveCompanions.Count; i++)
+                {
+                    CompanionConfig companion = context.ActiveCompanions[i];
+                    int starterCount = companion.StarterCards?.Count ?? 0;
+                    _builder.AppendLine($"  [{i}] {companion.DisplayName} ({companion.Role}) HP={companion.MaxHealth} Loyalty={companion.StartingLoyalty} Cards={starterCount}");
+                }
+            }
+
+            if (context.CompanionReserve.Count > 0)
+            {
+                _builder.AppendLine("- Reserve:");
+                for (int i = 0; i < context.CompanionReserve.Count; i++)
+                {
+                    CompanionConfig companion = context.CompanionReserve[i];
+                    _builder.AppendLine($"  [{i}] {companion.DisplayName} ({companion.Role})");
+                }
+            }
         }
     }
 }

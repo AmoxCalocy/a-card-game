@@ -1,5 +1,5 @@
 ## 基础架构现状（2026-04-04）
-- 引擎版本：Unity 2022.3.62f2c1（LTS），暂代计划中的 Unity 6 LTS；待后续确认是否升级。
+- 引擎版本：Unity 2022.3.62f3（LTS），暂代计划中的 Unity 6 LTS；待后续确认是否升级。
 - 项目结构：`Assets/`、`Packages/`、`ProjectSettings/`、`UserSettings/` 已生成；使用 URP 2D 渲染管线。
 - 渲染配置：
   - `Assets/Settings/URP-2D-Renderer.asset`：默认 2D Renderer。
@@ -13,7 +13,7 @@
   - TextMeshPro、Timeline、Test Framework 已安装（packages-lock 记录）。
 - 编辑器与版本控制：
   - 序列化模式：Force Text；版本控制：Visible Meta Files（配合未来 Git/LFS）。
-  - 编辑器版本来源：`ProjectSettings/ProjectVersion.txt`，当前记录 `2022.3.62f2c1`（`m_EditorVersionWithRevision: 2022.3.62f2c1 (92e6e6be66dc)`），Unity Hub 以该文件显示项目版本。
+  - 编辑器版本来源：`ProjectSettings/ProjectVersion.txt`，当前记录 `2022.3.62f3`（`m_EditorVersionWithRevision: 2022.3.62f3 (96770f904ca7)`），Unity Hub 以该文件显示项目版本。
   - 版本控制：Git + Git LFS 已启用；分支模型 `main`（稳定）、`dev`（日常集成）、`feature/*`（需求开发）。`.gitattributes` 跟踪主要美术/音视频/3D 资产类型，>50MB 资产默认走 LFS。
 - CI/CD：
   - GitHub Actions（`.github/workflows/ci-build.yml`）：使用 game-ci/unity-builder v4，在 `dev`/`main` 的 pull request 及手动触发时构建 `StandaloneWindows64`；默认从 `ProjectVersion.txt` 解析 Unity 版本，也支持 `workflow_dispatch` 输入 `unity_version` 手动覆盖；缓存键包含 `ProjectVersion.txt` 与 `packages-lock.json`。
@@ -439,3 +439,50 @@
   - 本层仅实现胜负二元结算与资源/卡牌奖惩，`CompanionInjured` 硬编码为 `false` 作为伙伴系统的占位钩子。
   - 第15步伙伴招募/编制系统将消费该钩子，补充伙伴受伤/离队逻辑。
   - 当前未实现"部分奖励"（战败时给予已击杀敌人的战利品），设计上保持二元清晰。
+
+## 伙伴招募层（2026-07-30，实施计划第15步）
+- 目标：实现伙伴招募机制，形成"招募伙伴 -> 加入激活/后备队伍 -> 自动注入起始卡牌到卡池 -> 事件广播"的可观测闭环。
+- 关键架构洞察：
+  - 伙伴分为"激活队伍"（最多 4 人）和"后备"两层结构，激活队伍是战斗/检定的参与上限，后备作为扩容池但暂不参与战斗。
+  - 招募时始终将伙伴起始卡牌注入 `GameContext.CardPool`（持久卡池），确保卡牌跨战斗持续可用，且独立于临时战斗牌堆。
+  - 重复招募通过 `CompanionConfig` 引用判重（`List<CompanionConfig>.Contains`），简单可靠，后续可扩展为 ID 判重。
+
+- 文件职责（第15步相关）：
+  - `Assets/Scripts/Core/GameContext.cs`
+    - 第15步伙伴聚合点：维护 `_activeCompanions`（最多 `MaxActiveCompanions=4`）和 `_companionReserve`，对外暴露只读属性。
+    - 新增 `TryRecruitCompanion(CompanionConfig, out string)`：校验空值/重复 → 按激活上限决定目标列表 → 遍历起始卡牌注入卡池 → 发布 `CompanionRecruitedEvent`。
+    - 新增 `ResetCompanionState()` 在 `Initialize()` 中清空伙伴列表。
+  - `Assets/Scripts/Core/GameEventMessages.cs`
+    - 新增 `CompanionRecruitedEvent`：承载招募的伙伴引用、激活/后备计数、添加卡牌数、是否加入激活队伍、摘要信息。
+  - `Assets/Scripts/Core/GameContextDebugPanel.cs`
+    - 新增 `AppendCompanionSummary()`：显示激活队伍（角色/HP/忠诚/卡牌数）和后备列表；面板高度从 760 增加到 880 以容纳新区域。
+    - 订阅 `CompanionRecruitedEvent` 实现招募后即时刷新。
+  - `Assets/Scripts/Core/GameContextStep15TestDriver.cs`
+    - 第15步验收驱动：`G` 键逐个招募、`H` 键一键全部招募；Editor 下自动扫描 `Assets/Data` 目录填充测试伙伴列表。
+    - 通过 `DontDestroyOnLoad` 常驻，失败时使用 `Debug.LogError` 确保 Console 可见。
+    - GUI 面板（屏幕左侧）显示当前激活/后备状态和操作按钮。
+  - `Assets/Scripts/Core/GameContextBootstrap.cs`
+    - 启动引导扩展：自动确保 `GameContextStep15TestDriver` 注入，与其他测试驱动保持一致。
+  - `Assets/Data/TestStep4/CompanionConfig*.asset`（6 个测试伙伴）
+    - 覆盖全部 5 种 `CompanionRole`：老兵（Damage）、游侠（Damage）、护卫（Guard）、斥候（Control）、医者（Support）、使节（Diplomacy）。
+    - 每个伙伴引用至少一张起始卡牌，用于验证招募后卡池增长。
+
+- 生命周期与数据流（第15步）：
+  - 初始化阶段：`GameContext.Initialize()` → `ResetCompanionState()` 清空伙伴列表。
+  - 招募阶段：测试驱动调用 `TryRecruitCompanion` → 判重 → 加入激活/后备 → 注入起始卡牌到 `_cardPool` → 发布 `CompanionRecruitedEvent` → 调试面板与测试驱动刷新。
+  - 重复招募被拒绝：基于列表包含判重，返回 false 并输出错误日志。
+
+- 边界与后续：
+  - 本层仅实现"招募与卡牌注入"，未包含伙伴在战斗中的出战、伙伴专属牌堆、忠诚度与离队逻辑（第16步范围）。
+  - `CompanionInjured` 在第14步已预留钩子，第16步伙伴忠诚与受伤系统将消费该钩子。
+  - 后备伙伴暂不参与任何战斗/检定/事件流程，仅作为"已招募但未上阵"的状态标记。
+  - 当前未实现伙伴离队、交换、装备与特质激活等编排操作（第17步范围）。
+
+## 第15步验证状态（2026-07-30）
+- 验证环境：Unity 2022.3.62f3，`Assets/Scenes/SampleScene.unity`。
+- 验证方法：通过 `GameContextStep15TestDriver` 按 `G` 键逐次招募，`H` 键一键全部招募；观察 Console 日志与调试面板。
+- 验证结果：
+  - 前 4 次招募伙伴进入激活队伍（Active），第 5-6 个进入后备（Reserve）。
+  - 每次招募后卡池计数增加对应起始卡牌数，调试面板即时刷新。
+  - 第 7 次招募（循环至已招募伙伴）被拒绝并输出错误日志。
+  - 验证结论：第15步验收通过。

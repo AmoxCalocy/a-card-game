@@ -537,6 +537,32 @@ namespace OneManJourney.Runtime
         public int FoodAmount { get; }
     }
 
+    public readonly struct CompanionRecruitedEvent
+    {
+        public CompanionRecruitedEvent(
+            CompanionConfig companion,
+            int activeCompanionCount,
+            int reserveCompanionCount,
+            int starterCardsAdded,
+            bool addedToActive,
+            string summary)
+        {
+            Companion = companion;
+            ActiveCompanionCount = activeCompanionCount;
+            ReserveCompanionCount = reserveCompanionCount;
+            StarterCardsAdded = starterCardsAdded;
+            AddedToActive = addedToActive;
+            Summary = summary ?? string.Empty;
+        }
+
+        public CompanionConfig Companion { get; }
+        public int ActiveCompanionCount { get; }
+        public int ReserveCompanionCount { get; }
+        public int StarterCardsAdded { get; }
+        public bool AddedToActive { get; }
+        public string Summary { get; }
+    }
+
     public readonly struct CrisisDisasterTriggeredEvent
     {
         public CrisisDisasterTriggeredEvent(

@@ -165,3 +165,20 @@
   - 失败为二元结果，不给部分奖励；弃牌从持久化 `GameContext.CardPool` 移除（非临时战斗牌堆）。
   - `CompanionInjured` 硬编码为 `false`，作为第15-17步伙伴系统的占位钩子。
 - 验证结论：第14步验收通过（胜利后资源增加、失败后资源/卡牌减少均符合规则）；按约束未开始第15步。
+
+2026-07-30：完成实施计划第15步（伙伴招募）并验证通过（由测试执行）
+- 在 `Assets/Scripts/Core/GameEventMessages.cs` 新增 `CompanionRecruitedEvent`（Companion、ActiveCompanionCount、ReserveCompanionCount、StarterCardsAdded、AddedToActive、Summary），作为伙伴招募的统一事件契约。
+- 在 `Assets/Scripts/Core/GameContext.cs` 新增伙伴管理系统：
+  - 新增 `_activeCompanions`（最多 4 上阵）与 `_companionReserve`（后备）列表，以及 `MaxActiveCompanions` 常量。
+  - 新增 `TryRecruitCompanion(CompanionConfig, out string)`：校验空值/重复招募，若激活未满则加入激活队伍否则进入后备；自动将伙伴的 `StarterCards` 加入持久卡池；发布 `CompanionRecruitedEvent`。
+  - 新增 `ResetCompanionState()` 在初始化时清空伙伴列表。
+- 在 `Assets/Scripts/Core/GameContextDebugPanel.cs` 新增伙伴观测区（`AppendCompanionSummary`）：显示激活队伍（角色/HP/忠诚/卡牌数）和后备列表；订阅 `CompanionRecruitedEvent` 实时刷新；面板高度从 760 增加到 880。
+- 新增 `Assets/Scripts/Core/GameContextStep15TestDriver.cs`：第15步手工验收驱动，`G` 键逐个招募、`H` 键一键全部招募；Editor 下自动从 `Assets/Data` 扫描 `CompanionConfig` 资产填充测试列表；失败时输出 `Debug.LogError` 确保 Console 可见。
+- 在 `Assets/Scripts/Core/GameContextBootstrap.cs` 新增 `GameContextStep15TestDriver` 自动注入，避免手动挂载。
+- 更新/新增 6 个测试伙伴资产（老兵/斥候/护卫/医者/使节/游侠），覆盖全部 5 种 CompanionRole，用于验证激活上限与后备机制。
+- 关键设计决策：
+  - 激活队伍上限 4 人，超出的伙伴进入后备（Reserve），后备暂不参与战斗但已招募且卡牌已入池。
+  - 重复招募同一伙伴被拒绝（基于 `CompanionConfig` 引用判重），确保不会重复添加卡牌。
+  - 伙伴起始卡牌直接加入 `GameContext.CardPool`（持久卡池），不在战斗牌堆中，确保招募效果跨战斗持续。
+  - `CompanionInjured` 在第14步已预留钩子，第16步伙伴忠诚与受伤系统将消费此钩子。
+- 验证结论：第15步验收通过（招募后伙伴进入激活/后备正确，卡池自动增加起始卡牌，重复招募被拒绝并显示错误日志）；按约束未开始第16步。
