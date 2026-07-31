@@ -192,6 +192,134 @@ namespace OneManJourney.Runtime
             SetResource(type, next);
         }
 
+        public int GetTradePrice(ResourceType type, bool isBuying)
+        {
+            int basePrice = type switch
+            {
+                ResourceType.Food => 2,
+                ResourceType.MedicalSupplies => 3,
+                ResourceType.BuildingMaterials => 4,
+                ResourceType.Intel => 5,
+                ResourceType.DraftOrder => 5,
+                _ => 1
+            };
+
+            if (!isBuying)
+            {
+                return Mathf.Max(1, Mathf.RoundToInt(basePrice * 0.5f));
+            }
+
+            int reputation = GetResource(ResourceType.Reputation);
+            float discount = Mathf.Clamp(reputation * 0.005f, 0f, 0.5f);
+            return Mathf.Max(1, Mathf.RoundToInt(basePrice * (1f - discount)));
+        }
+
+        public bool TryBuyResource(ResourceType type, int amount, out string message)
+        {
+            message = string.Empty;
+            if (amount <= 0)
+            {
+                message = "Amount must be positive.";
+                return false;
+            }
+
+            if (type == ResourceType.Wealth || type == ResourceType.Crisis)
+            {
+                message = $"Cannot buy {type}.";
+                return false;
+            }
+
+            int unitPrice = GetTradePrice(type, true);
+            int totalCost = unitPrice * amount;
+            int currentWealth = GetResource(ResourceType.Wealth);
+
+            if (currentWealth < totalCost)
+            {
+                message = $"Not enough Wealth. Need {totalCost}, have {currentWealth}.";
+                return false;
+            }
+
+            SetResource(ResourceType.Wealth, currentWealth - totalCost);
+            int before = GetResource(type);
+            AddResource(type, amount);
+            int after = GetResource(type);
+            message = $"Bought {amount} {type} for {totalCost} Wealth (price: {unitPrice}/ea). {before} -> {after}.";
+            Debug.Log($"Step19 Trade: {message}");
+            return true;
+        }
+
+        public bool TrySellResource(ResourceType type, int amount, out string message)
+        {
+            message = string.Empty;
+            if (amount <= 0)
+            {
+                message = "Amount must be positive.";
+                return false;
+            }
+
+            if (type == ResourceType.Wealth || type == ResourceType.Crisis)
+            {
+                message = $"Cannot sell {type}.";
+                return false;
+            }
+
+            int current = GetResource(type);
+            if (current < amount)
+            {
+                message = $"Not enough {type}. Have {current}, trying to sell {amount}.";
+                return false;
+            }
+
+            int unitPrice = GetTradePrice(type, false);
+            int totalGain = unitPrice * amount;
+            SetResource(type, current - amount);
+            AddResource(ResourceType.Wealth, totalGain);
+            message = $"Sold {amount} {type} for {totalGain} Wealth (price: {unitPrice}/ea). {current} -> {GetResource(type)}.";
+            Debug.Log($"Step19 Trade: {message}");
+            return true;
+        }
+
+        public bool TryHealCompanion(CompanionState companion, out string message)
+        {
+            message = string.Empty;
+            if (companion == null)
+            {
+                message = "Companion is null.";
+                return false;
+            }
+
+            if (!companion.IsInjured)
+            {
+                message = $"{companion.DisplayName} is not injured.";
+                return false;
+            }
+
+            int cost = 1;
+            int currentMeds = GetResource(ResourceType.MedicalSupplies);
+            if (currentMeds < cost)
+            {
+                message = $"Not enough MedicalSupplies. Need {cost}, have {currentMeds}.";
+                return false;
+            }
+
+            SetResource(ResourceType.MedicalSupplies, currentMeds - cost);
+            companion.IsInjured = false;
+            message = $"Healed {companion.DisplayName} for {cost} MedicalSupplies. HP restored to {companion.CurrentHealth}.";
+            Debug.Log($"Step20 Heal: {message}");
+            NotifyStateChanged();
+            return true;
+        }
+
+        public bool TryInjureCompanion(CompanionState companion)
+        {
+            if (companion == null || companion.IsInjured) return false;
+            companion.IsInjured = true;
+            companion.CurrentHealth = Mathf.Max(1, companion.CurrentHealth / 2);
+            Debug.Log($"Step20 Injure: {companion.DisplayName} injured. HP: {companion.CurrentHealth}/{companion.MaxHealth}.");
+            NotifyStateChanged();
+            return true;
+        }
+
         public void SetJourneyProgress(int chapter, int nodeIndex, int nodesVisited)
         {
             int previousChapter = JourneyState.Chapter;

@@ -46,6 +46,18 @@ namespace OneManJourney.Runtime
             {
                 context.gameObject.AddComponent<GameContextStep18TestDriver>();
             }
+
+            GameContextStep19TestDriver step19Driver = FindStep19Driver();
+            if (step19Driver == null)
+            {
+                context.gameObject.AddComponent<GameContextStep19TestDriver>();
+            }
+
+            GameContextStep20TestDriver step20Driver = FindStep20Driver();
+            if (step20Driver == null)
+            {
+                context.gameObject.AddComponent<GameContextStep20TestDriver>();
+            }
         }
 
         private static GameContext FindContext()
@@ -117,6 +129,28 @@ namespace OneManJourney.Runtime
         private static GameContextStep18TestDriver FindStep18Driver()
         {
             GameContextStep18TestDriver[] items = Resources.FindObjectsOfTypeAll<GameContextStep18TestDriver>();
+            if (items == null || items.Length == 0)
+            {
+                return null;
+            }
+
+            return items[0];
+        }
+
+        private static GameContextStep19TestDriver FindStep19Driver()
+        {
+            GameContextStep19TestDriver[] items = Resources.FindObjectsOfTypeAll<GameContextStep19TestDriver>();
+            if (items == null || items.Length == 0)
+            {
+                return null;
+            }
+
+            return items[0];
+        }
+
+        private static GameContextStep20TestDriver FindStep20Driver()
+        {
+            GameContextStep20TestDriver[] items = Resources.FindObjectsOfTypeAll<GameContextStep20TestDriver>();
             if (items == null || items.Length == 0)
             {
                 return null;

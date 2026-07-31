@@ -242,3 +242,32 @@
   - GUI 面板位于右下角，避免遮挡调试面板。
 - 在 `Assets/Scripts/Core/GameContextBootstrap.cs` 注册 Step18 驱动自动注入。
 - 验证结论：第18步验收通过（资源增减正确、非 Crisis 负数截断生效、Crisis 允许负值、事件日志完整）；按约束未开始下一步。
+
+2026-07-31：完成实施计划第19步（交易系统）并验证通过（由测试执行）
+- 在 `Assets/Scripts/Core/GameContext.cs` 新增交易 API：
+  - `GetTradePrice(ResourceType type, bool isBuying)`：基于声望计算价格。买入价 = 基准价 × (1 - 声望×0.5%，上限折扣 50%)；卖出价固定为基准价×0.5，不受声望影响。
+  - `TryBuyResource(type, amount, out message)`：消耗 Wealth 购买资源，余额不足返回失败。
+  - `TrySellResource(type, amount, out message)`：出售资源换取 Wealth，库存不足返回失败。
+  - 基准价：Food(2)、MedicalSupplies(3)、BuildingMaterials(4)、Intel(5)、DraftOrder(5)。
+  - 不可交易 Wealth 和 Crisis。
+- 新增 `Assets/Scripts/Core/GameContextStep19TestDriver.cs`：
+  - F1/F2 买/卖 Food，F3/F4 买/卖 MedicalSupplies，F5 输出所有资源当前价格到 Console。
+  - GUI 面板位于右侧中部，显示 Wealth、Reputation、各资源买卖价和最近操作结果。
+- 在 `Assets/Scripts/Core/GameContextBootstrap.cs` 注册 Step19 驱动自动注入。
+- 在 `SampleScene` 中创建 Step18/Step19 驱动 GameObject，便于 Inspector 调参。
+- 关键设计决策：卖出价固定，仅买入享受声望折扣——避免高声望反而低卖出的不合理情况。
+- 验证结论：第19步验收通过（高声望后买入价格显著下降、卖出价保持固定、买卖资源正确增减）；按约束未开始下一步。
+
+2026-07-31：完成实施计划第20步（补给与治疗）并验证通过（由测试执行）
+- 在 `Assets/Scripts/Core/GameContext.cs` 新增治疗/受伤 API：
+  - `TryHealCompanion(companion, out message)`：消耗 1 MedicalSupplies 治愈伙伴受伤，恢复满血。
+  - `TryInjureCompanion(companion)`：使伙伴受伤（HP 减半），供测试验证治疗链路。
+- 新增 `Assets/Scripts/Core/GameContextStep20TestDriver.cs`：
+  - F1/F2 在 Supply 节点用 Wealth 买 Food（1/5 个），复用 Step19 交易 API。
+  - F3 治愈选中伙伴（消耗 1 Medical），F4 使选中伙伴受伤（测试用）。
+  - F5/F6 切换选中伙伴。
+  - 补给操作仅在当前激活节点为 Supply 时生效，非 Supply 节点提示"Not at a Supply node"。
+  - GUI 面板位于右侧上部（Step8 下方），显示节点状态、资源、伙伴 HP/受伤状态。
+- 在 `Assets/Scripts/Core/GameContextBootstrap.cs` 注册 Step20 驱动，`SampleScene` 中创建对应 GameObject。
+- 关键设计决策：补给操作绑定 Supply 节点类型校验，确保"在补给节点可买粮治疗"的语义正确。
+- 验证结论：第20步验收通过（Supply 节点可买粮治疗、非 Supply 节点拒绝、MedicalSupplies 不足时治愈失败、治愈后受伤状态清除 HP 恢复）；按约束未开始下一步。

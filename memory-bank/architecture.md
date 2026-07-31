@@ -593,4 +593,32 @@
 
 ## 第18步验证状态（2026-07-31）
 - 验证方法：F1-F8 增减资源，F9 截断测试，F10 Crisis 负值测试；观察 Console 与 GUI。
-- 验证结论：第18步验收通过。
+  - 验证结论：第18步验收通过。
+
+## 交易系统层（2026-07-31，实施计划第19步）
+- 目标：实现简单买卖系统，价格受声望影响，形成"声望影响折扣 → 买卖资源 → 事件日志"的可观测闭环。
+- 关键架构洞察：
+  - 交易定价采用单向折扣策略：买入享受声望折扣（最高 50%），卖出固定为基准价的 50%——避免高声望反而低卖出的反直觉情况。
+  - 交易 API 直接内置于 `GameContext`，不引入独立 TradeManager，保持最小架构复杂度。
+- 文件职责：
+  - `Assets/Scripts/Core/GameContext.cs`：`GetTradePrice`（买入/卖出定价）、`TryBuyResource`、`TrySellResource`。
+  - `Assets/Scripts/Core/GameContextStep19TestDriver.cs`：验收驱动，热键买卖 + 价格查询，GUI 位于右侧中部。
+- 边界：交易当前不依赖 SupplyScene 场景，可在任意场景通过测试驱动验证。后续 Step 20 补给节点将消费本步 API。
+
+## 第19步验证状态（2026-07-31）
+- 验证方法：高声望（106）观察买入价降至最低、卖出价保持固定；买卖后资源与 Wealth 正确更新。
+  - 验证结论：第19步验收通过。
+
+## 补给与治疗层（2026-07-31，实施计划第20步）
+- 目标：实现补给节点专属操作——财富换粮 + 医疗物资治愈伙伴，形成"Supply 节点校验 → 资源消费 → 伙伴状态恢复"的可观测闭环。
+- 关键架构洞察：
+  - 补给操作绑定 `ActiveJourneyNodeType == Supply` 校验，确保语义正确：补给只在到达补给节点时可用。
+  - 治疗 API 内置 `IsInjured` 状态门控和资源校验，避免无消耗治疗和无效操作。
+- 文件职责：
+  - `Assets/Scripts/Core/GameContext.cs`：`TryHealCompanion`（消耗 MedicalSupplies 清受伤标记恢复满血）、`TryInjureCompanion`（测试用，HP 减半设置受伤标记）。
+  - `Assets/Scripts/Core/GameContextStep20TestDriver.cs`：验收驱动，Supply 节点买粮/治疗 + 伙伴选择 + 受伤模拟，GUI 位于右侧上部。
+- 边界：治疗仅处理受伤状态（IsInjured）恢复，当前不处理疾病牌移除（Step 23 范围）。
+
+## 第20步验证状态（2026-07-31）
+- 验证方法：进入 Supply 节点买粮治疗，非 Supply 节点验证拒绝，MedicalSupplies 不足时验证失败。
+- 验证结论：第20步验收通过。
