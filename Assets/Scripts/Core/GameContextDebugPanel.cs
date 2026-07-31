@@ -657,6 +657,7 @@ namespace OneManJourney.Runtime
             _builder.AppendLine($"- Energy: {_battleTurnController.CurrentEnergy}/{_battleTurnController.MaxEnergyPerTurn}");
             _builder.AppendLine($"- Player HP/Armor: {_battleTurnController.PlayerCurrentHealth}/{_battleTurnController.PlayerMaxHealth} | {_battleTurnController.PlayerArmor}");
             _builder.AppendLine($"- Player Status: {_battleTurnController.PlayerStatusSummary}");
+            AppendBattleCompanionFormation();
             _builder.AppendLine($"- Enemy Count: {_battleTurnController.EnemyQueue.Count}");
             _builder.AppendLine($"- Draw/Hand/Discard/Exhaust: {_battleTurnController.DrawPile.Count}/{_battleTurnController.Hand.Count}/{_battleTurnController.DiscardPile.Count}/{_battleTurnController.ExhaustPile.Count}");
             _builder.AppendLine($"- Last Effect: {_battleTurnController.LastCardEffectSummary}");
@@ -919,6 +920,25 @@ namespace OneManJourney.Runtime
                     CompanionState companion = context.CompanionReserve[i];
                     _builder.AppendLine($"  [{i}] {companion.GetStatusSummary()}");
                 }
+            }
+        }
+
+        private void AppendBattleCompanionFormation()
+        {
+            if (_battleTurnController == null) return;
+            IReadOnlyList<CompanionState> formation = _battleTurnController.CompanionFormation;
+            if (formation.Count == 0)
+            {
+                _builder.AppendLine("- Companions: None");
+                return;
+            }
+
+            _builder.AppendLine("- Companions (Formation):");
+            for (int i = 0; i < formation.Count; i++)
+            {
+                CompanionState c = formation[i];
+                string posLabel = i switch { 0 => "Vanguard", 1 => "Left", 2 => "Right", _ => $"Slot{i}" };
+                _builder.AppendLine($"  [{i}] {posLabel}: {c.DisplayName} ({c.Role}) L:{c.CurrentLoyalty}");
             }
         }
     }

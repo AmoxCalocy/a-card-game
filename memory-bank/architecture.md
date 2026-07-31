@@ -486,7 +486,7 @@
   - 第 7 次招募（循环至已招募伙伴）被拒绝并输出错误日志。
   - 验证结论：第15步验收通过。
 
-## 伙伴特质与忠诚度层（2026-07-30，实施计划第16步）
+## 伙伴特质与忠诚度层（2026-07-31，实施计划第16步）
 - 目标：将伙伴从"静态配置引用"升级为"带运行时状态的完整模型"，形成"忠诚度变化 -> 警告/自动离队 -> 技能检定"的可观测闭环。
 - 关键架构洞察：
   - 引入 `CompanionState` 运行时包装器，替代直接存储 `CompanionConfig` 引用，统一管理忠诚度、生命、受伤、离队风险等运行时字段。
@@ -529,10 +529,10 @@
 
 - 边界与后续：
   - `CompanionInjured` 字段已定义但战斗结算仍未消费该钩子，后续可在战斗失败时写入。
-  - 特质以 ID 字符串存储，检定时随机选取作为 flavor，未实现特质间联动规则（第17步范围）。
+  - 特质以 ID 字符串存储，检定时随机选取作为 flavor，未实现特质间联动规则。
   - 离队后伙伴起始卡牌不从卡池移除，后续可考虑是否应随离队清理。
 
-## 第16步验证状态（2026-07-30）
+## 第16步验证状态（2026-07-31）
 - 验证环境：Unity 2022.3.62f3，`Assets/Scenes/BattleScene.unity`。
 - 验证方法：通过 `GameContextStep15TestDriver` 招募伙伴后使用 `[+]/[-]` 调整忠诚度、`K` 技能检定、`L` 离队判定；观察 Console 日志与调试面板。
 - 验证结果：
@@ -541,3 +541,56 @@
   - 技能检定输出 d20 结果与特质选择，成功/失败判定正确。
   - 调试面板与 GUI 实时显示伙伴忠诚度、标签、离队风险和技能值。
   - 验证结论：第16步验收通过。
+
+## 队伍编排层（2026-07-31，实施计划第17步）
+- 目标：实现激活队伍的顺序编排与激活/后备互移，形成"编排站位 -> 战斗快照 -> 位置语义"的可观测闭环。
+- 关键架构洞察：
+  - 编队在进入战斗时拍快照（`InitializeCompanionFormation`），战斗中不动态更新，保证战斗流程确定性。
+  - 采用经典 list swap + insert/remove 操作，发布细粒度事件供 UI 和后续战斗系统消费。
+  - 站位赋予位置语义（Vanguard/Left/Right/Slot），为后续战斗站位影响技能目标选择和受击概率预留扩展点。
+
+- 文件职责（第17步相关）：
+  - `Assets/Scripts/Core/GameContext.cs`
+    - 新增 `SwapActiveCompanions(indexA, indexB)`：交换并发布 `CompanionSquadReorderedEvent`。
+    - 新增 `MoveCompanionToActive(companion, targetIndex)`：后备→激活，发布 `CompanionMovedToActiveEvent`。
+    - 新增 `MoveCompanionToReserve(companion)`：激活→后备，发布 `CompanionMovedToReserveEvent`。
+  - `Assets/Scripts/Core/GameEventMessages.cs`
+    - 新增 `CompanionSquadReorderedEvent`（新顺序、from/to 索引）。
+    - 新增 `CompanionMovedToActiveEvent`（目标索引、激活计数）。
+    - 新增 `CompanionMovedToReserveEvent`（后备计数）。
+  - `Assets/Scripts/Core/BattleTurnController.cs`
+    - 新增 `_companionFormation` 与 `CompanionFormation` 属性：战斗开始时从 `ActiveCompanions` 读取快照，战斗结束时清空。
+  - `Assets/Scripts/Core/GameContextDebugPanel.cs`
+    - 新增 `AppendBattleCompanionFormation()`：战斗区域展示站位标签、伙伴名、角色、忠诚度。
+  - `Assets/Scripts/Core/GameContextStep15TestDriver.cs`
+    - 升级为 Step15+16+17 联合驱动；GUI 移至屏幕居中。
+    - 新增热键：`[`/`]` 交换位置、`R` 移到后备、`A` 移到激活；激活列表显示站位标签。
+
+- 生命周期与数据流（第17步）：
+  - 战斗外编排：`SwapActiveCompanions`/`MoveCompanionToReserve`/`MoveCompanionToActive` → 直接修改 `_activeCompanions` 列表 → 发布对应事件 → 面板刷新。
+  - 进入战斗时：`StartBattleFlowFromContext` → `InitializeCompanionFormation` → 读取当前 `ActiveCompanions` 顺序 → 写入 `_companionFormation` 快照。
+  - 战斗结束：`EndBattleFlow` → `_companionFormation.Clear()`。
+
+- 边界与后续：
+  - 编队为进入战斗时的快照，战斗中不响应外部编排操作。
+  - 站位标签当前为只读展示，未接入战斗技能目标选择或受击概率（后续战斗系统深化时接入）。
+  - 当前未实现拖拽 UI（计划中的正式 UI 阶段），仅提供热键操作。
+
+## 第17步验证状态（2026-07-31）
+- 验证环境：Unity 2022.3.62f3，`Assets/Scenes/BattleScene.unity`。
+- 验证方法：招募伙伴后用 `[`/`]` 交换顺序，`R`/`A` 移动激活/后备，进入战斗节点后观察 Debug 面板 Formation 区块。
+- 验证结果：
+  - 非战斗场景交换顺序后进入新战斗节点，编队正确反映新顺序。
+  - 激活/后备互移功能正常，激活满员时拒绝移入。
+  - 站位标签（Vanguard/Left/Right）正确显示。
+  - 验证结论：第17步验收通过。
+
+## 资源系统验证层（2026-07-31，实施计划第18步）
+- 目标：验证 Step 5 实现的资源系统（统一接口、事件、负数保护）满足验收标准。
+- 核心系统（已完成）：`GameContext.GetResource`/`SetResource`/`AddResource` 提供统一读写接口；`ResourceChangedEvent` 在每次变更时发布；非 `Crisis` 类型自动截断到 0；`ResourceTableConfig` 提供初始值。
+- 新增文件：`Assets/Scripts/Core/GameContextStep18TestDriver.cs` — 第18步验收驱动，支持热键增减资源、负数截断测试、Crisis 负值测试、Console 事件日志、右下角 GUI 面板。
+- 边界：本步仅为已有系统的验收验证，不引入新架构组件。
+
+## 第18步验证状态（2026-07-31）
+- 验证方法：F1-F8 增减资源，F9 截断测试，F10 Crisis 负值测试；观察 Console 与 GUI。
+- 验证结论：第18步验收通过。

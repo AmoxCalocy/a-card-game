@@ -23,6 +23,12 @@ namespace OneManJourney.Runtime
         [SerializeField] private KeyCode _skillCheckHotkey = KeyCode.K;
         [SerializeField] private KeyCode _departureCheckHotkey = KeyCode.L;
 
+        [Header("Hotkeys (Step 17)")]
+        [SerializeField] private KeyCode _swapUpHotkey = KeyCode.LeftBracket;
+        [SerializeField] private KeyCode _swapDownHotkey = KeyCode.RightBracket;
+        [SerializeField] private KeyCode _moveToReserveHotkey = KeyCode.R;
+        [SerializeField] private KeyCode _moveToActiveHotkey = KeyCode.A;
+
         private GameContext _context;
         private GameEventBus _eventBus;
         private IDisposable _companionRecruitedSubscription;
@@ -106,6 +112,26 @@ namespace OneManJourney.Runtime
                 {
                     _selectedCompanionIndex = Mathf.Min(total - 1, _selectedCompanionIndex + 1);
                 }
+            }
+
+            if (Input.GetKeyDown(_swapUpHotkey))
+            {
+                TrySwapSelectedUp();
+            }
+
+            if (Input.GetKeyDown(_swapDownHotkey))
+            {
+                TrySwapSelectedDown();
+            }
+
+            if (Input.GetKeyDown(_moveToReserveHotkey))
+            {
+                TryMoveSelectedToReserve();
+            }
+
+            if (Input.GetKeyDown(_moveToActiveHotkey))
+            {
+                TryMoveSelectedToActive();
             }
         }
 
@@ -289,6 +315,99 @@ namespace OneManJourney.Runtime
             Debug.Log($"Step16TestDriver Action: {_lastActionMessage}");
         }
 
+        private void TrySwapSelectedUp()
+        {
+            int activeCount = _context.ActiveCompanions.Count;
+            if (_selectedCompanionIndex <= 0 || _selectedCompanionIndex >= activeCount)
+            {
+                _lastActionMessage = "Cannot swap: select an active companion (not the first one).";
+                return;
+            }
+
+            if (_context.SwapActiveCompanions(_selectedCompanionIndex, _selectedCompanionIndex - 1))
+            {
+                CompanionState c = _context.ActiveCompanions[_selectedCompanionIndex - 1];
+                _selectedCompanionIndex--;
+                _lastActionMessage = $"Swapped {c.DisplayName} up (now at position {_selectedCompanionIndex}).";
+            }
+            else
+            {
+                _lastActionMessage = "Swap failed.";
+            }
+        }
+
+        private void TrySwapSelectedDown()
+        {
+            int activeCount = _context.ActiveCompanions.Count;
+            if (_selectedCompanionIndex < 0 || _selectedCompanionIndex >= activeCount - 1)
+            {
+                _lastActionMessage = "Cannot swap: select an active companion (not the last one).";
+                return;
+            }
+
+            if (_context.SwapActiveCompanions(_selectedCompanionIndex, _selectedCompanionIndex + 1))
+            {
+                CompanionState c = _context.ActiveCompanions[_selectedCompanionIndex + 1];
+                _selectedCompanionIndex++;
+                _lastActionMessage = $"Swapped {c.DisplayName} down (now at position {_selectedCompanionIndex}).";
+            }
+            else
+            {
+                _lastActionMessage = "Swap failed.";
+            }
+        }
+
+        private void TryMoveSelectedToReserve()
+        {
+            int activeCount = _context.ActiveCompanions.Count;
+            if (_selectedCompanionIndex < 0 || _selectedCompanionIndex >= activeCount)
+            {
+                _lastActionMessage = "Cannot move to reserve: select an active companion.";
+                return;
+            }
+
+            CompanionState companion = _context.ActiveCompanions[_selectedCompanionIndex];
+            if (_context.MoveCompanionToReserve(companion))
+            {
+                _lastActionMessage = $"Moved {companion.DisplayName} to reserve ({_context.CompanionReserve.Count} total).";
+                _selectedCompanionIndex = Mathf.Min(_selectedCompanionIndex, _context.ActiveCompanions.Count + _context.CompanionReserve.Count - 1);
+            }
+            else
+            {
+                _lastActionMessage = "Move to reserve failed.";
+            }
+        }
+
+        private void TryMoveSelectedToActive()
+        {
+            int activeCount = _context.ActiveCompanions.Count;
+            int reserveStart = activeCount;
+            int total = activeCount + _context.CompanionReserve.Count;
+            if (_selectedCompanionIndex < reserveStart || _selectedCompanionIndex >= total)
+            {
+                _lastActionMessage = "Cannot move to active: select a reserve companion.";
+                return;
+            }
+
+            if (activeCount >= GameContext.MaxActiveCompanions)
+            {
+                _lastActionMessage = $"Cannot move to active: squad full ({activeCount}/{GameContext.MaxActiveCompanions}). Move someone to reserve first.";
+                return;
+            }
+
+            int reserveIndex = _selectedCompanionIndex - reserveStart;
+            CompanionState companion = _context.CompanionReserve[reserveIndex];
+            if (_context.MoveCompanionToActive(companion, activeCount))
+            {
+                _lastActionMessage = $"Moved {companion.DisplayName} to active squad (position {activeCount}).";
+                _selectedCompanionIndex = activeCount;
+            }
+            else
+            {
+                _lastActionMessage = "Move to active failed.";
+            }
+        }
+
         private static void HandleCompanionRecruited(CompanionRecruitedEvent evt)
         {
             string squad = evt.AddedToActive ? "Active" : "Reserve";
@@ -347,11 +466,11 @@ namespace OneManJourney.Runtime
             }
 
             const int width = 440;
-            const int height = 400;
-            Rect rect = new Rect(Screen.width - width - 16, 16, width, height);
+            const int height = 460;
+            Rect rect = new Rect((Screen.width - width) / 2f, (Screen.height - height) / 2f, width, height);
             GUI.Box(rect, string.Empty);
 
-            string status = "Step15+16 Companion Test Driver\n";
+            string status = "Step15+16+17 Companion Test Driver\n";
             status += $"Active: {_context.ActiveCompanions.Count}/{GameContext.MaxActiveCompanions}";
             status += $"  Reserve: {_context.CompanionReserve.Count}";
             status += $"  CardPool: {_context.CardPool.Count}\n";
@@ -363,7 +482,8 @@ namespace OneManJourney.Runtime
                 {
                     CompanionState c = _context.ActiveCompanions[i];
                     string marker = i == _selectedCompanionIndex ? " <<<" : string.Empty;
-                    status += $"  [{i}] {c.DisplayName} ({c.Role}) L:{c.CurrentLoyalty}({c.GetLoyaltyLabel()}) Risk:{c.DepartureRisk:P0}{marker}\n";
+                    string posLabel = i switch { 0 => "Vanguard", 1 => "Left", 2 => "Right", _ => $"Slot{i}" };
+                    status += $"  [{i}] {posLabel}: {c.DisplayName} ({c.Role}) L:{c.CurrentLoyalty}({c.GetLoyaltyLabel()}) Risk:{c.DepartureRisk:P0}{marker}\n";
                 }
             }
 
@@ -397,9 +517,9 @@ namespace OneManJourney.Runtime
                 status += $"\nLast: {_lastActionMessage}";
             }
 
-            GUI.Label(new Rect(rect.x + 8, rect.y + 8, rect.width - 16, 260), status);
+            GUI.Label(new Rect(rect.x + 8, rect.y + 8, rect.width - 16, 280), status);
 
-            float buttonTop = rect.y + 272f;
+            float buttonTop = rect.y + 292f;
             float buttonWidth = (rect.width - 24f) / 2f;
 
             if (GUI.Button(new Rect(rect.x + 8f, buttonTop, buttonWidth, 24f), $"Recruit Next [{_recruitNextHotkey}]"))
@@ -435,9 +555,31 @@ namespace OneManJourney.Runtime
             }
 
             buttonTop += 28f;
+            if (GUI.Button(new Rect(rect.x + 8f, buttonTop, buttonWidth, 24f), $"Swap Up [[]]"))
+            {
+                TrySwapSelectedUp();
+            }
+
+            if (GUI.Button(new Rect(rect.x + 12f + buttonWidth, buttonTop, buttonWidth, 24f), $"Swap Down []]"))
+            {
+                TrySwapSelectedDown();
+            }
+
+            buttonTop += 28f;
+            if (GUI.Button(new Rect(rect.x + 8f, buttonTop, buttonWidth, 24f), $"To Reserve [{_moveToReserveHotkey}]"))
+            {
+                TryMoveSelectedToReserve();
+            }
+
+            if (GUI.Button(new Rect(rect.x + 12f + buttonWidth, buttonTop, buttonWidth, 24f), $"To Active [{_moveToActiveHotkey}]"))
+            {
+                TryMoveSelectedToActive();
+            }
+
+            buttonTop += 28f;
             GUI.Label(
                 new Rect(rect.x + 8f, buttonTop, rect.width - 16f, 20f),
-                $"Select: [1]/[2] scroll  |  {_testCompanions.Count} companions loaded");
+                $"[1]/[2] Select  |  []/[] Swap  |  [R]eserve  |  [A]ctive  |  {_testCompanions.Count} loaded");
         }
 
         private string GetNextCompanionName()

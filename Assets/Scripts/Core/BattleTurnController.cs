@@ -49,6 +49,7 @@ namespace OneManJourney.Runtime
         private BattleTurnPhase _phase = BattleTurnPhase.None;
         private System.Random _random;
         private BattleCombatantState _playerState;
+        private readonly List<CompanionState> _companionFormation = new List<CompanionState>();
         private string _lastCardEffectSummary = string.Empty;
         private string _lastEnemyTurnSummary = "none";
 
@@ -69,6 +70,7 @@ namespace OneManJourney.Runtime
         public IReadOnlyList<EnemyConfig> EnemyQueue => _enemyQueue;
         public IReadOnlyList<BattleCombatantState> EnemyStates => _enemyStates;
         public IReadOnlyList<BattleEnemyIntentView> EnemyIntents => _enemyIntents;
+        public IReadOnlyList<CompanionState> CompanionFormation => _companionFormation;
         public IReadOnlyList<CardConfig> DrawPile => _drawPile;
         public IReadOnlyList<CardConfig> Hand => _hand;
         public IReadOnlyList<CardConfig> DiscardPile => _discardPile;
@@ -350,6 +352,7 @@ namespace OneManJourney.Runtime
             _enemyQueue.Clear();
             _enemyQueue.AddRange(encounter.EnemyQueue);
             InitializeBattleState();
+            InitializeCompanionFormation();
             BuildStartingDeck(encounter.EncounterSeed);
             Publish(new BattleFlowInitializedEvent(
                 _activeNodeId,
@@ -418,6 +421,18 @@ namespace OneManJourney.Runtime
 
             _lastCardEffectSummary = "Battle initialized.";
             _lastEnemyTurnSummary = "Awaiting first enemy turn.";
+        }
+
+        private void InitializeCompanionFormation()
+        {
+            _companionFormation.Clear();
+            if (_context == null) return;
+
+            IReadOnlyList<CompanionState> activeCompanions = _context.ActiveCompanions;
+            for (int i = 0; i < activeCompanions.Count; i++)
+            {
+                _companionFormation.Add(activeCompanions[i]);
+            }
         }
 
         private CardEffectResult ExecuteCardEffect(CardConfig card)
@@ -889,6 +904,7 @@ namespace OneManJourney.Runtime
             _enemyStates.Clear();
             _enemyIntents.Clear();
             _playerState = null;
+            _companionFormation.Clear();
             _lastCardEffectSummary = string.Empty;
             _lastEnemyTurnSummary = string.Empty;
         }

@@ -646,6 +646,49 @@ namespace OneManJourney.Runtime
         public string TraitUsed { get; }
     }
 
+    public readonly struct CompanionSquadReorderedEvent
+    {
+        public CompanionSquadReorderedEvent(
+            IReadOnlyList<CompanionState> newOrder,
+            int fromIndex,
+            int toIndex)
+        {
+            NewOrder = newOrder;
+            FromIndex = fromIndex;
+            ToIndex = toIndex;
+        }
+
+        public IReadOnlyList<CompanionState> NewOrder { get; }
+        public int FromIndex { get; }
+        public int ToIndex { get; }
+    }
+
+    public readonly struct CompanionMovedToActiveEvent
+    {
+        public CompanionMovedToActiveEvent(CompanionState companion, int targetIndex, int activeCount)
+        {
+            Companion = companion;
+            TargetIndex = targetIndex;
+            ActiveCount = activeCount;
+        }
+
+        public CompanionState Companion { get; }
+        public int TargetIndex { get; }
+        public int ActiveCount { get; }
+    }
+
+    public readonly struct CompanionMovedToReserveEvent
+    {
+        public CompanionMovedToReserveEvent(CompanionState companion, int reserveCount)
+        {
+            Companion = companion;
+            ReserveCount = reserveCount;
+        }
+
+        public CompanionState Companion { get; }
+        public int ReserveCount { get; }
+    }
+
     public readonly struct CrisisDisasterTriggeredEvent
     {
         public CrisisDisasterTriggeredEvent(

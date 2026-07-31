@@ -613,6 +613,51 @@ namespace OneManJourney.Runtime
             return true;
         }
 
+        public bool SwapActiveCompanions(int indexA, int indexB)
+        {
+            if (indexA < 0 || indexA >= _activeCompanions.Count) return false;
+            if (indexB < 0 || indexB >= _activeCompanions.Count) return false;
+            if (indexA == indexB) return true;
+
+            CompanionState temp = _activeCompanions[indexA];
+            _activeCompanions[indexA] = _activeCompanions[indexB];
+            _activeCompanions[indexB] = temp;
+
+            Publish(new CompanionSquadReorderedEvent(_activeCompanions, indexA, indexB));
+            NotifyStateChanged();
+            return true;
+        }
+
+        public bool MoveCompanionToActive(CompanionState companion, int targetIndex)
+        {
+            if (companion == null) return false;
+            if (_activeCompanions.Contains(companion)) return false;
+            if (!_companionReserve.Contains(companion)) return false;
+            if (_activeCompanions.Count >= MaxActiveCompanions) return false;
+
+            _companionReserve.Remove(companion);
+            targetIndex = Mathf.Clamp(targetIndex, 0, _activeCompanions.Count);
+            _activeCompanions.Insert(targetIndex, companion);
+
+            Publish(new CompanionMovedToActiveEvent(companion, targetIndex, _activeCompanions.Count));
+            NotifyStateChanged();
+            return true;
+        }
+
+        public bool MoveCompanionToReserve(CompanionState companion)
+        {
+            if (companion == null) return false;
+            if (!_activeCompanions.Contains(companion)) return false;
+            if (_companionReserve.Contains(companion)) return false;
+
+            _activeCompanions.Remove(companion);
+            _companionReserve.Add(companion);
+
+            Publish(new CompanionMovedToReserveEvent(companion, _companionReserve.Count));
+            NotifyStateChanged();
+            return true;
+        }
+
         public void SetCardPool(IEnumerable<CardConfig> cards)
         {
             _cardPool.Clear();

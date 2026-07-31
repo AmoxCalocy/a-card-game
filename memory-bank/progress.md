@@ -183,7 +183,7 @@
   - `CompanionInjured` 在第14步已预留钩子，第16步伙伴忠诚与受伤系统将消费此钩子。
 - 验证结论：第15步验收通过（招募后伙伴进入激活/后备正确，卡池自动增加起始卡牌，重复招募被拒绝并显示错误日志）；按约束未开始第16步。
 
-2026-07-30：完成实施计划第16步（伙伴特质与忠诚度）并验证通过（由测试执行）
+2026-07-31：完成实施计划第16步（伙伴特质与忠诚度）并验证通过（由测试执行）
 - 新增 `Assets/Scripts/Core/CompanionState.cs`：运行时伙伴状态模型，封装 `CompanionConfig` 并管理 `CurrentLoyalty`（0-100）、`CurrentHealth`、`IsInjured`；提供四级忠诚度标签（Loyal ≥60 / Uneasy 30-59 / Discontent 1-29 / Rebellious 0）、离队风险计算（0%/15%/40%/100%）、忠诚度修正技能检定值（+2/0/-2/-5）。
 - 在 `Assets/Scripts/Core/GameEventMessages.cs` 扩展事件体系：
   - `CompanionRecruitedEvent` 载荷从 `CompanionConfig` 升级为 `CompanionState`。
@@ -209,3 +209,36 @@
   - 技能检定时随机选择一个伙伴特质 ID 作为 flavor 输出，后续可扩展为特质间联动规则。
   - 离队后伙伴起始卡牌不从卡池移除，保持简化设计。
 - 验证结论：第16步验收通过（忠诚度归零自动离队、警告/危险区间概率离队、技能检定正确输出结果）；按约束未开始第17步。
+
+2026-07-31：完成实施计划第17步（队伍编排 UI）并验证通过（由测试执行）
+- 在 `Assets/Scripts/Core/GameContext.cs` 新增队伍编排 API：
+  - `SwapActiveCompanions(indexA, indexB)`：交换激活队伍中两个伙伴的位置，发布 `CompanionSquadReorderedEvent`。
+  - `MoveCompanionToActive(companion, targetIndex)`：将后备伙伴移到激活队伍指定位置，发布 `CompanionMovedToActiveEvent`。
+  - `MoveCompanionToReserve(companion)`：将激活伙伴移到后备，发布 `CompanionMovedToReserveEvent`。
+- 在 `Assets/Scripts/Core/GameEventMessages.cs` 新增 3 个编排事件：`CompanionSquadReorderedEvent`、`CompanionMovedToActiveEvent`、`CompanionMovedToReserveEvent`。
+- 在 `Assets/Scripts/Core/BattleTurnController.cs` 接入伙伴编队：
+  - 新增 `_companionFormation` 列表与 `CompanionFormation` 公开属性。
+  - 战斗开始时从 `GameContext.ActiveCompanions` 读取当前顺序作为战斗站位快照。
+  - 战斗结束时清空编队。
+  - 站位标签：`[0] Vanguard`、`[1] Left`、`[2] Right`、`[3] Slot3`。
+- 在 `Assets/Scripts/Core/GameContextDebugPanel.cs` 战斗区域新增 `Companions (Formation)` 区块，显示站位标签、伙伴名、角色和忠诚度。
+- 升级 `Assets/Scripts/Core/GameContextStep15TestDriver.cs` 为 Step15+16+17 联合驱动：
+  - GUI 移至屏幕居中，避免与 Step8 驱动和 Debug 面板重叠。
+  - 新增 Step17 热键：`[`/`]` 交换位置、`R` 移到后备、`A` 移到激活。
+  - 激活队伍显示站位标签（Vanguard/Left/Right/Slot）。
+- 关键设计决策：
+  - 编队在进入战斗时拍快照，战斗中不动态更新，保证战斗流程确定性。
+  - 战斗外可自由编排，下次进入战斗时生效。
+  - 站位标签为位置语义标识，后续可影响技能目标选择和受击概率。
+- 验证结论：第17步验收通过（交换位置后进入战斗编队正确更新，激活/后备互移正常）；按约束未开始下一步。
+
+2026-07-31：完成实施计划第18步（资源系统验证）并验证通过（由测试执行）
+- 资源核心系统在 Step 5 已实现（`GetResource`/`SetResource`/`AddResource`、`ResourceChangedEvent`、非 Crisis 负数截断），第18步仅补充验收驱动。
+- 新增 `Assets/Scripts/Core/GameContextStep18TestDriver.cs`：
+  - F1-F8 热键增减 Food/Wealth/Reputation/MedicalSupplies（每次 ±10）。
+  - F9 负数截断测试：设 Food=5 后 -15，验证结果为 0（PASS/FAIL 日志）。
+  - F10 Crisis 负数测试：设 Crisis=-10，验证负数不被截断（PASS/FAIL 日志）。
+  - 订阅 `ResourceChangedEvent` 并输出 Console 日志和面板最近变更列表。
+  - GUI 面板位于右下角，避免遮挡调试面板。
+- 在 `Assets/Scripts/Core/GameContextBootstrap.cs` 注册 Step18 驱动自动注入。
+- 验证结论：第18步验收通过（资源增减正确、非 Crisis 负数截断生效、Crisis 允许负值、事件日志完整）；按约束未开始下一步。

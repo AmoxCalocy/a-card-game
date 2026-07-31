@@ -40,6 +40,12 @@ namespace OneManJourney.Runtime
             {
                 context.gameObject.AddComponent<BattleTurnController>();
             }
+
+            GameContextStep18TestDriver step18Driver = FindStep18Driver();
+            if (step18Driver == null)
+            {
+                context.gameObject.AddComponent<GameContextStep18TestDriver>();
+            }
         }
 
         private static GameContext FindContext()
@@ -106,6 +112,17 @@ namespace OneManJourney.Runtime
 
             GameObject eventSystemObject = new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
             Object.DontDestroyOnLoad(eventSystemObject);
+        }
+
+        private static GameContextStep18TestDriver FindStep18Driver()
+        {
+            GameContextStep18TestDriver[] items = Resources.FindObjectsOfTypeAll<GameContextStep18TestDriver>();
+            if (items == null || items.Length == 0)
+            {
+                return null;
+            }
+
+            return items[0];
         }
 
     }
