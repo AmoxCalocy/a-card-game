@@ -442,8 +442,8 @@ namespace OneManJourney.Runtime
             scrollRectTr.anchorMin = new Vector2(0f, 0f);
             scrollRectTr.anchorMax = new Vector2(0f, 1f);
             scrollRectTr.pivot = new Vector2(0f, 1f);
-            scrollRectTr.anchoredPosition = new Vector2(16f, -16f);
-            scrollRectTr.sizeDelta = new Vector2(480f, -32f);
+            scrollRectTr.anchoredPosition = new Vector2(16f, -48f);
+            scrollRectTr.sizeDelta = new Vector2(480f, -64f);
 
             Image bgImage = scrollRectObject.GetComponent<Image>();
             bgImage.color = new Color(0.08f, 0.08f, 0.08f, 0.88f);

@@ -271,3 +271,59 @@
 - 在 `Assets/Scripts/Core/GameContextBootstrap.cs` 注册 Step20 驱动，`SampleScene` 中创建对应 GameObject。
 - 关键设计决策：补给操作绑定 Supply 节点类型校验，确保"在补给节点可买粮治疗"的语义正确。
 - 验证结论：第20步验收通过（Supply 节点可买粮治疗、非 Supply 节点拒绝、MedicalSupplies 不足时治愈失败、治愈后受伤状态清除 HP 恢复）；按约束未开始下一步。
+
+2026-08-03：完成实施计划第21步（事件系统）并验证通过（由测试执行）
+- 在 `Assets/Scripts/Core/GameContext.cs` 新增 `TryResolveEvent(EventConfig, optionIndex, out summary)`：
+  - 支持四种解法类型：`Combat`（触发战斗）、`SkillCheck`（按 SuccessChance 随机判定）、`PayResource`（扣除 cost 直接成功）、`SacrificeCard`（随机移除卡牌）。
+  - 统一处理 costs 扣除、rewards 发放、Reputation 门槛校验、Companion 招募。
+  - 发布 `EventResolvedEvent`（event/option/type/success/summary），Console 同步日志。
+- 在 `Assets/Scripts/Core/GameEventMessages.cs` 新增 `EventResolvedEvent` 事件体。
+- 新增 `Assets/Scripts/Core/GameContextStep21TestDriver.cs`：
+  - F1-F3 选择事件选项，F4 切换事件，F5 Console 输出事件详情。
+  - Editor 下自动从 `Assets/Data` 扫描 EventConfig 资产。
+  - GUI 面板位于右侧中部，显示事件描述和各选项的 cost/reward/type/chance。
+  - 订阅 `EventResolvedEvent` 输出结算日志。
+- 更新 `Assets/Data/TestStep4/EventConfig.asset` 测试事件：配置三种解法（PayResource: 3Food→5Wealth、SkillCheck: 60%→3Medical、SacrificeCard: 1Card→10Reputation）。
+- 在 `Assets/Scripts/Core/GameContextBootstrap.cs` 注册 Step21 驱动，`SampleScene` 中创建对应 GameObject。
+- 验证结论：第21步验收通过（三种解法均能落地到资源/卡牌变化，事件日志完整）；按约束未开始下一步。
+
+2026-08-03：完成实施计划第22步（技能检定系统）并验证通过（由测试执行）
+- 在 `Assets/Scripts/Data/ScriptableObjects/EventConfig.cs` 的 `EventOptionData` 新增 `FailurePenalties` 字段，支持检定失败时扣除资源。
+- 升级 `Assets/Scripts/Core/GameContext.cs` 的 `TryResolveEvent` SkillCheck 分支：
+  - 从简单概率改为 d20 + 伙伴技能值 + 声望修正 判定。
+  - 自动选择激活队伍中技能值最高的伙伴（`GetBestCompanionForCheck`）。
+  - DC = max(6, 12 - 声望×3%)，高声望降低难度。
+  - 成功发放 Rewards，失败扣除 FailurePenalties。
+  - 无伙伴时纯 d20 vs DC。
+- 新增 `Assets/Scripts/Core/GameContextStep22TestDriver.cs`：
+  - F1 对最佳伙伴执行技能检定，F2 显示最佳伙伴和当前 DC。
+  - GUI 右侧底部，显示声望、DC、最佳伙伴信息。
+- 更新测试事件（Scout Ahead）：失败时 -2 Food。
+- 在 `Assets/Scripts/Core/GameContextBootstrap.cs` 注册 Step22 驱动，`SampleScene` 中创建对应 GameObject。
+- 关键设计决策：声望降低 DC 而非提高，确保"高声望=高成功率"的直觉正确。
+- 验证结论：第22步验收通过（高声望 DC 降低、伙伴技能值参与检定、失败扣资源正确）；按约束未开始下一步。
+
+2026-08-03：完成实施计划第23步（灾害事件卡组污染）并验证通过（由测试执行）
+- 在 `Assets/Scripts/Core/GameContext.cs` 新增 `_disasterCardTemplates` 字段（灾害触发时注入卡池的负面牌模板）。
+- 升级 `TriggerDisasterEvent`：灾害触发后自动遍历模板列表，将 Curse/Disease 牌加入 `_cardPool`，消息中标注"Added N disaster card(s)"。
+- Editor 下自动从 `Assets/Data` 扫描文件名含 "Curse" 或 "Disease" 的 `CardConfig` 资产填充模板列表。
+- 创建测试负面牌资产：
+  - `Assets/Data/TestStep4/CardConfig_Curse.asset`（Plague Curse，攻击牌，BaseValue=-3）
+  - `Assets/Data/TestStep4/CardConfig_Disease.asset`（Fatigue，后勤牌，BaseValue=-5）
+- 新增 `Assets/Scripts/Core/GameContextStep23TestDriver.cs`：
+  - F1 显示灾害信息（Crisis/阈值/Next/Pending），F2 拉高 Crisis 触发灾害。
+  - 订阅 `CrisisDisasterTriggeredEvent` 输出 Console 日志。
+  - GUI 右下角，显示 Crisis、阈值、卡池计数、Pending 灾害。
+- 在 `Assets/Scripts/Core/GameContextBootstrap.cs` 注册 Step23 驱动，`SampleScene` 创建 GameObject。
+- 验证结论：第23步验收通过（灾害触发后卡池自动增加 Curse/Disease 牌、事件类型和 fallback 标记正确）；按约束未开始下一步。
+
+2026-08-03：完成实施计划第24步（主 HUD）并验证通过（由测试执行）
+- 新增 `Assets/Scripts/Core/GameContextHUD.cs`：屏幕顶部横条 HUD，Canvas Overlay。
+  - 常驻显示 Food/Wealth/Reputation/Medical/Crisis 资源值。
+  - 旅途中显示当前节点 ID 和类型。
+  - 战斗中显示 Turn/Energy/Draw/Hand/Discard 实时计数。
+  - 订阅 ResourceChanged、TurnStarted、CardPlayed、CardsDrawn、HandDiscarded、FlowEnded、NodeEntered 七种事件，每次操作即时刷新。
+- 创建 HUD Prefab `Assets/Prefabs/GameContextHUD.prefab`：半透明黑底白字横条，16px 字体，1920x1080 自适应缩放。
+- Debug 面板下移 32px（HUD 高度），避免遮挡。
+- 在 `Assets/Scripts/Core/GameContextBootstrap.cs` 注册 HUD 自动注入。
+- 验证结论：第24步验收通过（资源变化实时刷新、战斗中出牌/抽牌/弃牌计数同步、切场景数值一致）；按约束未开始下一步。

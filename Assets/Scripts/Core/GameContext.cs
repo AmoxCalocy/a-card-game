@@ -42,6 +42,8 @@ namespace OneManJourney.Runtime
         [SerializeField] private int _disasterTriggerThreshold = 6;
         [Min(1)]
         [SerializeField] private int _disasterTriggerStep = 6;
+        [Header("Disaster Cards")]
+        [SerializeField] private List<CardConfig> _disasterCardTemplates = new List<CardConfig>();
 
         private readonly Dictionary<ResourceType, int> _resources = new Dictionary<ResourceType, int>();
         private readonly List<CardConfig> _cardPool = new List<CardConfig>();
@@ -318,6 +320,173 @@ namespace OneManJourney.Runtime
             Debug.Log($"Step20 Injure: {companion.DisplayName} injured. HP: {companion.CurrentHealth}/{companion.MaxHealth}.");
             NotifyStateChanged();
             return true;
+        }
+
+        public bool TryResolveEvent(EventConfig eventConfig, int optionIndex, out string summary)
+        {
+            summary = string.Empty;
+            if (eventConfig == null)
+            {
+                summary = "Event config is null.";
+                return false;
+            }
+
+            IReadOnlyList<EventOptionData> options = eventConfig.Options;
+            if (optionIndex < 0 || optionIndex >= options.Count)
+            {
+                summary = $"Invalid option index {optionIndex}. Options: {options.Count}.";
+                return false;
+            }
+
+            EventOptionData option = options[optionIndex];
+
+            // Deduct costs first
+            IReadOnlyList<ResourceAmount> costs = option.Costs;
+            for (int i = 0; i < costs.Count; i++)
+            {
+                ResourceAmount cost = costs[i];
+                int current = GetResource(cost.Type);
+                if (current < cost.Amount)
+                {
+                    summary = $"Option '{option.Title}' requires {cost.Amount} {cost.Type}, but only have {current}.";
+                    return false;
+                }
+            }
+
+            for (int i = 0; i < costs.Count; i++)
+            {
+                ResourceAmount cost = costs[i];
+                SetResource(cost.Type, GetResource(cost.Type) - cost.Amount);
+            }
+
+            // Check reputation requirement
+            if (option.RequiredReputation > 0 && GetResource(ResourceType.Reputation) < option.RequiredReputation)
+            {
+                summary = $"Option '{option.Title}' requires {option.RequiredReputation} Reputation, but have {GetResource(ResourceType.Reputation)}.";
+                return false;
+            }
+
+            EventResolutionType resolutionType = option.ResolutionType;
+            bool success = true;
+
+            switch (resolutionType)
+            {
+                case EventResolutionType.Combat:
+                    summary = $"Combat event triggered by '{option.Title}'. Use battle system to resolve.";
+                    break;
+
+                case EventResolutionType.SkillCheck:
+                {
+                    CompanionState companion = GetBestCompanionForCheck();
+                    int baseDC = 12;
+                    int reputation = GetResource(ResourceType.Reputation);
+                    int repBonus = Mathf.RoundToInt(reputation * 0.03f);
+                    int difficulty = Mathf.Max(6, baseDC - repBonus);
+
+                    if (companion != null)
+                    {
+                        success = TryCompanionSkillCheck(companion, difficulty, out CompanionSkillCheckEvent result);
+                        summary = success
+                            ? $"Skill check '{option.Title}' PASSED! {companion.DisplayName} rolled {result.Roll}+{companion.GetSkillCheckValue()}={result.Total} vs DC {difficulty} (rep reduced DC by {repBonus})."
+                            : $"Skill check '{option.Title}' FAILED. {companion.DisplayName} rolled {result.Roll}+{companion.GetSkillCheckValue()}={result.Total} vs DC {difficulty} (rep reduced DC by {repBonus}).";
+                    }
+                    else
+                    {
+                        int roll = UnityEngine.Random.Range(1, 21);
+                        success = roll >= difficulty;
+                        summary = success
+                            ? $"Skill check '{option.Title}' PASSED (no companion). Roll {roll} vs DC {difficulty}."
+                            : $"Skill check '{option.Title}' FAILED (no companion). Roll {roll} vs DC {difficulty}.";
+                    }
+
+                    break;
+                }
+
+                case EventResolutionType.PayResource:
+                    success = true;
+                    summary = $"Paid costs for '{option.Title}'.";
+                    break;
+
+                case EventResolutionType.SacrificeCard:
+                    if (option.SacrificeCardCount > 0)
+                    {
+                        int sacrificed = 0;
+                        for (int i = 0; i < option.SacrificeCardCount; i++)
+                        {
+                            if (TryRemoveRandomCard(out _)) sacrificed++;
+                        }
+
+                        summary = sacrificed > 0
+                            ? $"Sacrificed {sacrificed} card(s) for '{option.Title}'."
+                            : $"No cards to sacrifice for '{option.Title}'.";
+                        success = sacrificed > 0;
+                    }
+                    else
+                    {
+                        summary = $"No sacrifice required for '{option.Title}'.";
+                    }
+
+                    break;
+            }
+
+            // Grant rewards on success, apply failure penalties on failure
+            if (success)
+            {
+                IReadOnlyList<ResourceAmount> rewards = option.Rewards;
+                for (int i = 0; i < rewards.Count; i++)
+                {
+                    ResourceAmount reward = rewards[i];
+                    AddResource(reward.Type, reward.Amount);
+                }
+
+                if (option.RecruitedCompanion != null)
+                {
+                    TryRecruitCompanion(option.RecruitedCompanion, out string recruitMsg);
+                    if (!string.IsNullOrWhiteSpace(recruitMsg))
+                    {
+                        summary += " " + recruitMsg;
+                    }
+                }
+            }
+            else
+            {
+                IReadOnlyList<ResourceAmount> penalties = option.FailurePenalties;
+                if (penalties.Count > 0)
+                {
+                    summary += " Penalties:";
+                    for (int i = 0; i < penalties.Count; i++)
+                    {
+                        ResourceAmount penalty = penalties[i];
+                        int current = GetResource(penalty.Type);
+                        int actual = Mathf.Min(current, penalty.Amount);
+                        SetResource(penalty.Type, current - actual);
+                        summary += $" -{actual} {penalty.Type}";
+                    }
+                }
+            }
+
+            Publish(new EventResolvedEvent(eventConfig, option, resolutionType, success, summary));
+            Debug.Log($"Step21 Event: {eventConfig.DisplayName} option='{option.Title}' success={success} summary='{summary}'.");
+            NotifyStateChanged();
+            return success;
+        }
+
+        public CompanionState GetBestCompanionForCheck()
+        {
+            CompanionState best = null;
+            int bestValue = int.MinValue;
+            for (int i = 0; i < _activeCompanions.Count; i++)
+            {
+                CompanionState c = _activeCompanions[i];
+                int value = c.GetSkillCheckValue();
+                if (value > bestValue)
+                {
+                    bestValue = value;
+                    best = c;
+                }
+            }
+
+            return best;
         }
 
         public void SetJourneyProgress(int chapter, int nodeIndex, int nodesVisited)
@@ -1062,6 +1231,23 @@ namespace OneManJourney.Runtime
                 ? $"Crisis reached {triggerThreshold}. Fallback event '{selectedEvent.DisplayName}' triggered as disaster."
                 : $"Crisis reached {triggerThreshold}. Disaster '{selectedEvent.DisplayName}' triggered ({selectedEvent.DisasterType}).";
 
+            // Pollute card pool with disaster penalty cards
+            int cardsAdded = 0;
+            for (int i = 0; i < _disasterCardTemplates.Count; i++)
+            {
+                CardConfig card = _disasterCardTemplates[i];
+                if (card != null)
+                {
+                    _cardPool.Add(card);
+                    cardsAdded++;
+                }
+            }
+
+            if (cardsAdded > 0)
+            {
+                _lastDisasterTriggerMessage += $" Added {cardsAdded} disaster card(s) to pool.";
+            }
+
             Publish(new CrisisDisasterTriggeredEvent(
                 currentCrisis,
                 triggerThreshold,
@@ -1207,6 +1393,23 @@ namespace OneManJourney.Runtime
             if (_startingEnemyPool.Count == 0)
             {
                 _startingEnemyPool = LoadAssets<EnemyConfig>();
+            }
+
+            if (_disasterCardTemplates.Count == 0)
+            {
+                _disasterCardTemplates = new List<CardConfig>();
+                string[] allCardGuids = AssetDatabase.FindAssets("t:CardConfig", new[] { "Assets/Data" });
+                for (int i = 0; i < allCardGuids.Length; i++)
+                {
+                    string cardPath = AssetDatabase.GUIDToAssetPath(allCardGuids[i]);
+                    string fileName = System.IO.Path.GetFileNameWithoutExtension(cardPath);
+                    if (fileName.Contains("Curse") || fileName.Contains("Disease"))
+                    {
+                        CardConfig card = AssetDatabase.LoadAssetAtPath<CardConfig>(cardPath);
+                        if (card != null && !_disasterCardTemplates.Contains(card))
+                            _disasterCardTemplates.Add(card);
+                    }
+                }
             }
 #endif
         }

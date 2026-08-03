@@ -621,4 +621,61 @@
 
 ## 第20步验证状态（2026-07-31）
 - 验证方法：进入 Supply 节点买粮治疗，非 Supply 节点验证拒绝，MedicalSupplies 不足时验证失败。
-- 验证结论：第20步验收通过。
+  - 验证结论：第20步验收通过。
+
+## 事件系统层（2026-08-03，实施计划第21步）
+- 目标：实现事件多选项解析，形成"选择选项 → 扣除costs → 判定结果 → 发放rewards → 事件广播"的可观测闭环。
+- 关键架构洞察：
+  - 将四种解法类型统一在 `TryResolveEvent` 单入口，避免分散的 if-else 调用点。
+  - SkillCheck 采用 `SuccessChance` 直接判定（非 d20），简化事件检定逻辑——战斗中的 d20 检定仍在 CompanionState 中独立存在。
+- 文件职责：
+  - `Assets/Scripts/Core/GameContext.cs`：`TryResolveEvent` 统一事件处理（cost扣减/reward发放/reputation门槛/companion招募/SacrificeCard/成功概率）。
+  - `Assets/Scripts/Core/GameEventMessages.cs`：`EventResolvedEvent`。
+  - `Assets/Scripts/Core/GameContextStep21TestDriver.cs`：验收驱动，F1-F3 选项执行，F4 事件切换，GUI 右侧中部。
+  - `Assets/Data/TestStep4/EventConfig.asset`：升级为三种解法测试事件。
+- 边界：Combat 类型当前仅输出提示，未接入战斗场景切换（后续可扩展）。
+
+## 第21步验证状态（2026-08-03）
+- 验证方法：F1 PayResource（付费→奖励）、F2 SkillCheck（概率→奖励）、F3 SacrificeCard（弃卡→奖励）。
+  - 验证结论：第21步验收通过。
+
+## 技能检定系统层（2026-08-03，实施计划第22步）
+- 目标：将事件技能检定从简单概率升级为 d20 + 伙伴技能值 + 声望修正 的完整模型，支持成功/失败不同分支。
+- 关键架构洞察：
+  - 自动选择最佳伙伴（`GetBestCompanionForCheck`），技能值 = `SkillCheckBonus` + 忠诚度修正。
+  - DC = max(6, 12 - 声望×3%)——高声望降低难度，符合直觉。
+  - 失败惩罚通过 `EventOptionData.FailurePenalties` 序列化字段配表，支持策划自由定义。
+- 文件职责：
+  - `Assets/Scripts/Data/ScriptableObjects/EventConfig.cs`：`FailurePenalties` 字段。
+  - `Assets/Scripts/Core/GameContext.cs`：`GetBestCompanionForCheck`、升级的 SkillCheck 分支、失败惩罚处理。
+  - `Assets/Scripts/Core/GameContextStep22TestDriver.cs`：验收驱动。
+
+## 第22步验证状态（2026-08-03）
+- 验证方法：高声望观察 DC 降低，有/无伙伴对比检定结果，失败验证扣资源。
+  - 验证结论：第22步验收通过。
+
+## 灾害卡组污染层（2026-08-03，实施计划第23步）
+- 目标：灾害触发时自动向卡池注入负面牌（Curse/Disease），形成"危机跨阈值 → 灾害事件 + 卡组污染"的可观测闭环。
+- 关键架构洞察：
+  - 采用模板列表机制（`_disasterCardTemplates`），策划可在 Inspector 或 Data 文件夹中自由配置灾害牌池。
+  - Editor 下自动按文件名扫描（含 "Curse"/"Disease"），减少手工挂载负担。
+- 文件职责：
+  - `Assets/Scripts/Core/GameContext.cs`：`_disasterCardTemplates` 字段、`TriggerDisasterEvent` 升级。
+  - `Assets/Data/TestStep4/CardConfig_Curse.asset`、`CardConfig_Disease.asset`：测试负面牌。
+  - `Assets/Scripts/Core/GameContextStep23TestDriver.cs`：验收驱动。
+
+## 第23步验证状态（2026-08-03）
+- 验证方法：触发灾害观察 CrisisDisasterTriggeredEvent 日志和卡池计数增长。
+  - 验证结论：第23步验收通过。
+
+## 主 HUD 层（2026-08-03，实施计划第24步）
+- 目标：实现跨场景持久 HUD，展示资源、节点信息和战斗状态。
+- 关键架构洞察：HUD 作为独立 Canvas Overlay 组件，订阅事件总线驱动刷新，与 Debug 面板解耦。
+- 文件职责：
+  - `Assets/Scripts/Core/GameContextHUD.cs`：HUD MonoBehaviour，Prefab + 程序化双路径创建，订阅七种事件。
+  - `Assets/Prefabs/GameContextHUD.prefab`：可编辑 Prefab。
+- 边界：当前为纯文本横条，后续可升级为图标化正式 HUD。
+
+## 第24步验证状态（2026-08-03）
+- 验证方法：战斗中出牌观察 HUD 计数变化，切场景验证资源一致。
+- 验证结论：第24步验收通过。

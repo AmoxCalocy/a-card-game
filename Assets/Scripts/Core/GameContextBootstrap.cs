@@ -23,6 +23,12 @@ namespace OneManJourney.Runtime
                 context.gameObject.AddComponent<GameContextDebugPanel>();
             }
 
+            GameContextHUD hud = FindHUD();
+            if (hud == null)
+            {
+                context.gameObject.AddComponent<GameContextHUD>();
+            }
+
             JourneyNodeSceneRouter router = FindSceneRouter();
             if (router == null)
             {
@@ -58,6 +64,24 @@ namespace OneManJourney.Runtime
             {
                 context.gameObject.AddComponent<GameContextStep20TestDriver>();
             }
+
+            GameContextStep21TestDriver step21Driver = FindStep21Driver();
+            if (step21Driver == null)
+            {
+                context.gameObject.AddComponent<GameContextStep21TestDriver>();
+            }
+
+            GameContextStep22TestDriver step22Driver = FindStep22Driver();
+            if (step22Driver == null)
+            {
+                context.gameObject.AddComponent<GameContextStep22TestDriver>();
+            }
+
+            GameContextStep23TestDriver step23Driver = FindStep23Driver();
+            if (step23Driver == null)
+            {
+                context.gameObject.AddComponent<GameContextStep23TestDriver>();
+            }
         }
 
         private static GameContext FindContext()
@@ -74,6 +98,17 @@ namespace OneManJourney.Runtime
         private static GameContextDebugPanel FindPanel()
         {
             GameContextDebugPanel[] items = Resources.FindObjectsOfTypeAll<GameContextDebugPanel>();
+            if (items == null || items.Length == 0)
+            {
+                return null;
+            }
+
+            return items[0];
+        }
+
+        private static GameContextHUD FindHUD()
+        {
+            GameContextHUD[] items = Resources.FindObjectsOfTypeAll<GameContextHUD>();
             if (items == null || items.Length == 0)
             {
                 return null;
@@ -151,6 +186,39 @@ namespace OneManJourney.Runtime
         private static GameContextStep20TestDriver FindStep20Driver()
         {
             GameContextStep20TestDriver[] items = Resources.FindObjectsOfTypeAll<GameContextStep20TestDriver>();
+            if (items == null || items.Length == 0)
+            {
+                return null;
+            }
+
+            return items[0];
+        }
+
+        private static GameContextStep21TestDriver FindStep21Driver()
+        {
+            GameContextStep21TestDriver[] items = Resources.FindObjectsOfTypeAll<GameContextStep21TestDriver>();
+            if (items == null || items.Length == 0)
+            {
+                return null;
+            }
+
+            return items[0];
+        }
+
+        private static GameContextStep22TestDriver FindStep22Driver()
+        {
+            GameContextStep22TestDriver[] items = Resources.FindObjectsOfTypeAll<GameContextStep22TestDriver>();
+            if (items == null || items.Length == 0)
+            {
+                return null;
+            }
+
+            return items[0];
+        }
+
+        private static GameContextStep23TestDriver FindStep23Driver()
+        {
+            GameContextStep23TestDriver[] items = Resources.FindObjectsOfTypeAll<GameContextStep23TestDriver>();
             if (items == null || items.Length == 0)
             {
                 return null;

@@ -711,4 +711,27 @@ namespace OneManJourney.Runtime
         public DisasterEventType DisasterType { get; }
         public bool UsedFallbackEvent { get; }
     }
+
+    public readonly struct EventResolvedEvent
+    {
+        public EventResolvedEvent(
+            EventConfig eventConfig,
+            EventOptionData option,
+            EventResolutionType resolutionType,
+            bool success,
+            string summary)
+        {
+            EventConfig = eventConfig;
+            Option = option;
+            ResolutionType = resolutionType;
+            Success = success;
+            Summary = summary ?? string.Empty;
+        }
+
+        public EventConfig EventConfig { get; }
+        public EventOptionData Option { get; }
+        public EventResolutionType ResolutionType { get; }
+        public bool Success { get; }
+        public string Summary { get; }
+    }
 }

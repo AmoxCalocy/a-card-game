@@ -35,6 +35,7 @@ namespace OneManJourney.Data
         [SerializeField] private float _successChance = 1f;
         [SerializeField] private List<ResourceAmount> _costs = new List<ResourceAmount>();
         [SerializeField] private List<ResourceAmount> _rewards = new List<ResourceAmount>();
+        [SerializeField] private List<ResourceAmount> _failurePenalties = new List<ResourceAmount>();
         [SerializeField] private int _requiredReputation;
         [Min(0)]
         [SerializeField] private int _sacrificeCardCount;
@@ -47,6 +48,7 @@ namespace OneManJourney.Data
         public float SuccessChance => _successChance;
         public IReadOnlyList<ResourceAmount> Costs => _costs;
         public IReadOnlyList<ResourceAmount> Rewards => _rewards;
+        public IReadOnlyList<ResourceAmount> FailurePenalties => _failurePenalties;
         public int RequiredReputation => _requiredReputation;
         public int SacrificeCardCount => _sacrificeCardCount;
         public CompanionConfig RecruitedCompanion => _recruitedCompanion;
